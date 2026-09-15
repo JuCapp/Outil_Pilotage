@@ -1,0 +1,3038 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pilotage Plateau — Gantt dynamique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#16233A; --ink-soft:#2C3F5C; --paper:#EDEEE6; --panel:#F7F7F2;
+    --steel:#5C7080; --line:#D7D9CE; --amber:#E0973C; --coral:#C1473C;
+    --teal:#2F8F7A; --onTrack:#3E76A8; --relect-dark:#527485; --today:#C1473C;
+    --danger-bg:#F8E1DE;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;padding:28px 32px 70px;}
+  h1{font-family:'Archivo',sans-serif;font-weight:700;font-size:22px;margin:0 0 2px;letter-spacing:-.01em;}
+  .subtitle{font-size:13px;color:var(--steel);margin:0 0 6px;}
+  .storage-note{font-size:11.5px;color:var(--steel);margin:0 0 18px;display:flex;align-items:center;gap:8px;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block;}
+  .dot.loading{background:var(--amber);}
+
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;}
+  .kpi-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;}
+  .kpi-card .num{font-family:'Archivo',sans-serif;font-weight:700;font-size:22px;line-height:1.1;}
+  .kpi-card .lbl{font-size:11.5px;color:var(--steel);margin-top:3px;}
+  .kpi-card.risk .num{color:var(--amber);}
+  .kpi-card.late .num{color:var(--coral);}
+  .kpi-card.done .num{color:var(--teal);}
+
+  .main-tabs{display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  .main-tab-btn{font-family:'Archivo',sans-serif;font-weight:600;font-size:13.5px;color:var(--steel);background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 4px;margin-right:22px;cursor:pointer;}
+  .main-tab-btn.active{color:var(--ink);border-bottom-color:var(--ink);}
+  .main-tab-btn.manager-tab{margin-left:auto;margin-right:0;padding-left:14px;}
+  .main-tab-btn.manager-tab::before{content:"🔒 ";font-size:10px;}
+  .main-panel{display:none;}
+  .main-panel.active{display:block;}
+  .manager-note{background:var(--panel);border:1px dashed var(--line);border-radius:8px;padding:10px 14px;margin-bottom:16px;}
+
+  .fin-section{margin-bottom:28px;}
+  .fin-h2{font-family:'Archivo',sans-serif;font-weight:700;font-size:15px;margin:0 0 4px;}
+  .fin-sub{font-size:12px;color:var(--steel);margin:0 0 12px;}
+  .fin-period{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--steel);}
+  .fin-period input{font-family:'Inter',sans-serif;font-size:12px;padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);}
+  table.fin-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  table.fin-table th{font-family:'Archivo',sans-serif;font-weight:600;font-size:11px;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);background:#fff;white-space:nowrap;}
+  table.fin-table th.sortable{cursor:pointer;user-select:none;}
+  table.fin-table th.sortable:hover{color:var(--ink-soft);}
+  table.fin-table td{padding:9px 12px;border-bottom:1px solid var(--line);font-size:12.5px;white-space:nowrap;}
+  table.fin-table td.wrap-cell{white-space:normal;min-width:180px;max-width:280px;}
+  table.fin-table tr:last-child td{border-bottom:none;}
+  table.fin-table tr:nth-child(even) td{background:rgba(255,255,255,.5);}
+  .marge-bar-wrap{display:inline-block;width:70px;height:7px;background:var(--line);border-radius:4px;overflow:hidden;vertical-align:middle;margin-right:8px;}
+  .marge-bar{height:100%;border-radius:4px;}
+  .marge-bar.pos{background:var(--teal);}
+  .marge-bar.neg{background:var(--coral);}
+  .fin-num-pos{color:var(--teal);font-weight:600;}
+  .fin-num-neg{color:var(--coral);font-weight:600;}
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;}
+  .tabgroup{display:flex;gap:8px;flex-wrap:wrap;}
+  .tabs{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px;}
+  .tab-btn{font-family:'Archivo',sans-serif;font-weight:600;font-size:12.5px;color:var(--steel);background:transparent;border:none;border-radius:6px;padding:7px 13px;cursor:pointer;}
+  .tab-btn.active{background:var(--ink);color:#fff;}
+  .legend{display:flex;align-items:center;gap:14px;font-size:11.5px;color:var(--steel);flex-wrap:wrap;}
+  .legend-item{display:flex;align-items:center;gap:5px;}
+  .swatch{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  .swatch.relect{background:repeating-linear-gradient(135deg,var(--relect-dark),var(--relect-dark) 3px,#fff 3px,#fff 6px);}
+
+  .board{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .board-inner{display:flex;}
+  .labels-col{flex:0 0 220px;border-right:1px solid var(--line);}
+  .labels-header{height:44px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 14px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--steel);text-transform:uppercase;letter-spacing:.04em;}
+  .group-label{padding:9px 14px 5px;font-family:'Archivo',sans-serif;font-weight:600;font-size:12px;border-bottom:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:space-between;}
+  .group-label .count{font-family:'IBM Plex Mono',monospace;font-weight:400;font-size:10.5px;color:var(--steel);}
+  .timeline-scroll{overflow-x:auto;flex:1;position:relative;}
+  .timeline-inner{position:relative;}
+  .ruler{height:44px;border-bottom:1px solid var(--line);position:relative;background:#fff;}
+  .ruler-tick{position:absolute;top:0;bottom:0;border-left:1px solid var(--line);}
+  .ruler-tick span{position:absolute;top:6px;left:4px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--steel);white-space:nowrap;}
+  .ruler-tick .wd{position:absolute;top:22px;left:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#9BA5AE;white-space:nowrap;}
+  .gridline{position:absolute;top:0;bottom:0;border-left:1px solid var(--line);opacity:.55;}
+  .weekend-col{position:absolute;top:0;bottom:0;background:rgba(92,112,128,.06);}
+  .today-line{position:absolute;top:0;bottom:0;width:0;border-left:1.5px dashed var(--today);z-index:5;}
+  .group-row{position:relative;border-bottom:1px solid var(--line);background:#fff;}
+  .bar{position:absolute;border-radius:5px;cursor:pointer;display:flex;align-items:center;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(22,35,58,.12);}
+  .bar-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:#fff;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar.realisation{background:var(--ink-soft);}
+  .bar.relecture{background:var(--relect-dark);}
+  .status-livre{background:var(--teal);}
+  .status-oncours{background:var(--onTrack);}
+  .status-risque{background:var(--amber);}
+  .status-retard{background:var(--coral);}
+  .seg{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(255,255,255,.35) 3px,rgba(255,255,255,.35) 6px);}
+  .diamond{position:absolute;width:9px;height:9px;background:var(--ink);transform:translate(-50%,-50%) rotate(45deg);border:1.5px solid #fff;z-index:4;}
+  .target-tick{position:absolute;width:0;border-left:1.5px dashed #16233A;opacity:.55;z-index:3;}
+
+  .cal-nav{display:none;align-items:center;gap:10px;margin-bottom:12px;}
+  .cal-nav button.icon-btn{width:30px;height:30px;font-size:14px;}
+  .cal-label{font-family:'Archivo',sans-serif;font-weight:600;font-size:13px;text-transform:capitalize;min-width:220px;}
+  .calendar-container{display:none;}
+  table.cal-table{width:100%;border-collapse:collapse;background:#fff;}
+  table.cal-table th{font-family:'Archivo',sans-serif;font-weight:600;font-size:11.5px;color:var(--ink);text-align:left;padding:10px 10px;border-bottom:1px solid var(--line);white-space:nowrap;background:#fff;position:sticky;top:0;}
+  table.cal-table th.cal-rowlabel-h{position:sticky;left:0;z-index:2;min-width:190px;}
+  table.cal-table td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:6px 8px;vertical-align:top;min-width:150px;}
+  table.cal-table td.cal-rowlabel{font-family:'Archivo',sans-serif;font-weight:600;font-size:12px;background:#fff;position:sticky;left:0;white-space:nowrap;}
+  td.cal-weekend-cell{background:rgba(92,112,128,.05);}
+  th.cal-today-col,td.cal-today-col{background:rgba(193,71,60,.05);}
+  .cal-chip{display:inline-flex;align-items:center;padding:4px 8px;border-radius:5px;color:#fff;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.4;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .cal-chip.relecture{background-image:repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(255,255,255,.32) 3px,rgba(255,255,255,.32) 6px);}
+  .cal-idle{color:#B7BFC6;font-size:11px;font-style:italic;}
+  .cal-idle.cal-noshift{color:#D9DCDD;}
+  .cal-stack{display:flex;flex-direction:column;gap:4px;}
+  th.cal-lunch-sep,td.cal-lunch-sep{border-left:2px dashed var(--line);}
+  table.cal-table td.cal-task-cell{color:#fff;font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-align:center;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:8px 6px;}
+  table.cal-table td.cal-task-cell.relecture{background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,rgba(255,255,255,.32) 4px,rgba(255,255,255,.32) 8px);}
+  .cal-daysplit{display:flex;flex-direction:column;gap:3px;height:100%;min-height:40px;justify-content:center;}
+  .hr-row{display:flex;gap:2px;height:18px;}
+  .hr-seg{flex:1;border-radius:3px;cursor:pointer;color:#fff;font-family:'IBM Plex Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 3px;}
+  .hr-seg.relecture{background-image:repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(255,255,255,.32) 3px,rgba(255,255,255,.32) 6px);}
+  .hr-seg.hr-idle{background:rgba(92,112,128,.08);cursor:default;}
+
+  .conflicts{display:none;margin-bottom:20px;}
+  .conflicts-title{font-family:'Archivo',sans-serif;font-weight:700;font-size:13px;color:var(--coral);margin-bottom:10px;}
+  .conflict-card{background:#fff;border:1px solid var(--coral);border-left:4px solid var(--coral);border-radius:8px;padding:12px 14px;margin-bottom:8px;}
+  .conflict-head{display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:4px;}
+  .conflict-detail{font-size:12px;color:var(--steel);margin-bottom:8px;}
+  .conflict-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .conflict-btn{font-family:'Inter',sans-serif;font-weight:600;font-size:11.5px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 11px;cursor:pointer;}
+  .conflict-btn:hover{border-color:var(--ink-soft);}
+  .conflict-btn.secondary{background:#fff;}
+  .reassign-panel{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);}
+  .reassign-role{margin-bottom:8px;}
+  .reassign-role-head{font-size:11.5px;font-weight:600;margin-bottom:5px;}
+  .candidate-btn{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:var(--ink);color:#fff;border:none;border-radius:5px;padding:5px 9px;margin:0 6px 6px 0;cursor:pointer;}
+  .candidate-btn:hover{background:var(--ink-soft);}
+  .muted{color:var(--steel);font-weight:400;}
+  .muted.small{font-size:11px;}
+  .surf-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;}
+  .surf-tag{display:inline-flex;align-items:center;gap:5px;background:var(--ink);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:9.5px;padding:3px 6px;border-radius:4px;white-space:nowrap;}
+  .surf-tag button{background:none;border:none;color:#fff;opacity:.7;cursor:pointer;font-size:9px;padding:0;}
+  .surf-tag button:hover{opacity:1;}
+  .hist-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+  .fact-mini-form{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;}
+  .fact-mini-form input{font-family:'Inter',sans-serif;font-size:11.5px;padding:5px 7px;border:1px solid var(--line);border-radius:5px;}
+  .fact-mini-form input[type=month]{width:120px;}
+  .fact-mini-form input[type=number]{width:90px;}
+  .fact-list{display:flex;flex-direction:column;gap:3px;margin-bottom:4px;}
+  .fact-line{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:var(--panel);border-radius:4px;padding:3px 7px;}
+  .fact-line button{background:none;border:none;color:var(--coral);cursor:pointer;font-size:10px;}
+  .bc-budget-bar-wrap{display:inline-block;width:90px;height:7px;background:var(--line);border-radius:4px;overflow:hidden;vertical-align:middle;margin-right:8px;}
+  .bc-budget-bar{height:100%;border-radius:4px;background:var(--onTrack);}
+  .bc-budget-bar.over{background:var(--coral);}
+  .hist-bar{transition:opacity .12s;}
+  .hist-bar:hover{opacity:.82;}
+  .pivot-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;}
+  .pivot-legend-item{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--steel);}
+  .pivot-legend-swatch{width:12px;height:3px;border-radius:2px;}
+  .pivot-line{cursor:pointer;}
+  .pivot-dot{cursor:pointer;}
+  @media print{
+    body{padding:8px;background:#fff;}
+    .main-tabs,.manage-toggle,.manage-panel,.storage-note,.cal-nav,.toolbar,#reset-btn,.reset-btn,#hist-print-btn,button{display:none !important;}
+    .main-panel{display:block !important;}
+    .fin-section{page-break-inside:avoid;margin-bottom:18px;}
+    table.fin-table{border:1px solid #ccc;}
+  }
+
+  .tooltip{position:fixed;background:var(--ink);color:#F4F4EE;font-size:12px;line-height:1.5;padding:12px 14px;border-radius:8px;max-width:270px;z-index:50;pointer-events:none;display:none;box-shadow:0 6px 18px rgba(0,0,0,.22);}
+  .tooltip b{font-family:'Archivo',sans-serif;font-size:12.5px;color:#fff;display:block;margin-bottom:4px;}
+  .tooltip .row{display:flex;justify-content:space-between;gap:14px;color:#C7CCD6;}
+  .tooltip .row span:last-child{color:#fff;font-family:'IBM Plex Mono',monospace;}
+  .tooltip .pill{display:inline-block;margin-top:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;}
+  .tooltip .warn{color:#F5C97A;font-size:11px;margin-top:5px;}
+
+  .manage-toggle{margin-top:24px;display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'Archivo',sans-serif;font-weight:600;font-size:13px;color:var(--ink);user-select:none;}
+  .manage-toggle .chev{transition:transform .15s;}
+  .manage-toggle.open .chev{transform:rotate(90deg);}
+  .manage-panel{display:none;margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;}
+  .manage-panel.open{display:block;}
+  .mtabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+  .mtab-btn{font-family:'Archivo',sans-serif;font-weight:600;font-size:12px;color:var(--steel);background:#fff;border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer;}
+  .mtab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .msection{display:none;}
+  .msection.active{display:block;}
+  table.edit-table{width:100%;border-collapse:collapse;font-size:12px;}
+  table.edit-table th{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--steel);text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  table.edit-table td{padding:3px 6px;border-bottom:1px solid var(--line);}
+  table.edit-table input,table.edit-table select{width:100%;font-family:'Inter',sans-serif;font-size:12px;border:1px solid transparent;background:transparent;padding:5px 4px;border-radius:4px;color:var(--ink);}
+  table.edit-table input:hover,table.edit-table select:hover{border-color:var(--line);}
+  table.edit-table input:focus,table.edit-table select:focus{border-color:var(--ink-soft);outline:none;background:#fff;}
+  table.edit-table input[type=number]{width:64px;}
+  table.edit-table input[type=date]{width:128px;}
+  .row-actions{display:flex;gap:4px;}
+  .icon-btn{border:1px solid var(--line);background:#fff;border-radius:5px;width:26px;height:26px;cursor:pointer;font-size:13px;color:var(--steel);display:flex;align-items:center;justify-content:center;}
+  .icon-btn:hover{border-color:var(--coral);color:var(--coral);}
+  .icon-btn.up:hover,.icon-btn.down:hover{border-color:var(--ink-soft);color:var(--ink-soft);}
+  .add-row-btn{margin-top:10px;font-family:'Archivo',sans-serif;font-weight:600;font-size:12px;background:var(--ink);color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;}
+  .reset-btn{margin-left:auto;font-family:'Inter',sans-serif;font-size:11.5px;color:var(--steel);background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer;}
+  .table-scroll{overflow-x:auto;}
+  .badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 6px;border-radius:4px;color:#fff;}
+  .note{font-size:11.5px;color:var(--steel);margin-top:14px;line-height:1.6;}
+  .filter-bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .filter-bar input,.filter-bar select{font-family:'Inter',sans-serif;font-size:12px;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);}
+  .filter-bar input{flex:1;min-width:180px;}
+  th.sortable{cursor:pointer;user-select:none;}
+  th.sortable:hover{color:var(--ink-soft);}
+</style>
+</head>
+<body>
+
+<h1>Pilotage plateau — Gantt dynamique</h1>
+<p class="subtitle">Ordonnancement automatique des livrables, sous contrainte de disponibilité de chaque consultant (réalisation → relecture)</p>
+<p class="storage-note"><span class="dot loading" id="storage-dot"></span><span id="storage-text">Chargement des données partagées…</span></p>
+
+<div class="main-tabs" id="main-tabs">
+  <button class="main-tab-btn active" data-maintab="technique">Pilotage technique</button>
+  <button class="main-tab-btn" data-maintab="livrables">Vue Livrable</button>
+  <button class="main-tab-btn" data-maintab="financier">Pilotage financier</button>
+  <button class="main-tab-btn" data-maintab="facturation">Facturation</button>
+  <button class="main-tab-btn" data-maintab="historique">Historique</button>
+  <button class="main-tab-btn" data-maintab="pivot">Analyse croisée</button>
+  <button class="main-tab-btn manager-tab" data-maintab="equipe">Équipe</button>
+  <button class="main-tab-btn manager-tab" data-maintab="referentiel">Référentiel études</button>
+</div>
+
+<div class="main-panel" id="panel-pivot">
+  <div class="hist-controls">
+    <div class="fin-period">
+      <label class="muted small">Analyser par :</label>
+      <select id="pivot-dim">
+        <option value="type">Type d'étude</option>
+        <option value="consultant">Consultant</option>
+        <option value="departement">Département</option>
+        <option value="complexite">Complexité</option>
+      </select>
+    </div>
+    <div class="fin-period">
+      <label class="muted small">Métrique :</label>
+      <select id="pivot-metric">
+        <option value="ca">Chiffre d'affaires</option>
+        <option value="marge">Marge</option>
+        <option value="occupation">Taux d'occupation</option>
+        <option value="erreur">% d'erreur</option>
+      </select>
+    </div>
+  </div>
+  <div class="hist-controls">
+    <div class="tabs" id="pivot-gran-tabs">
+      <button class="tab-btn active" data-gran="mois">Mois</button>
+      <button class="tab-btn" data-gran="trimestre">Trimestre</button>
+      <button class="tab-btn" data-gran="semestre">Semestre</button>
+      <button class="tab-btn" data-gran="annee">Année</button>
+    </div>
+    <div class="tabs" id="pivot-base-tabs">
+      <button class="tab-btn active" data-base="pdd">Plan Delivery Date</button>
+      <button class="tab-btn" data-base="delivery">Delivery Date</button>
+      <button class="tab-btn" data-base="facturation">Date de facturation</button>
+    </div>
+    <div class="fin-period">
+      <input type="date" id="pivot-period-start"> <span class="muted">→</span> <input type="date" id="pivot-period-end">
+    </div>
+  </div>
+  <p class="muted small" id="pivot-desc"></p>
+  <div class="fin-section">
+    <h2 class="fin-h2" id="pivot-chart-title">Évolution dans le temps</h2>
+    <div id="pivot-chart"></div>
+    <div id="pivot-legend" class="pivot-legend"></div>
+  </div>
+  <div class="fin-section">
+    <h2 class="fin-h2">Tableau croisé</h2>
+    <div class="table-scroll"><table class="fin-table" id="tbl-pivot"></table></div>
+  </div>
+</div>
+
+<div class="main-panel" id="panel-livrables">
+  <div class="filter-bar">
+    <input type="text" id="vl-search" placeholder="Rechercher (étude, livrable, interlocuteur…)">
+    <select id="vl-filter-consultant"><option value="">Tous les consultants</option></select>
+    <select id="vl-filter-statut">
+      <option value="">Tous les statuts</option>
+      <option value="oncours">En cours</option>
+      <option value="risque">À risque</option>
+      <option value="retard">En retard</option>
+      <option value="livre">Livré</option>
+    </select>
+  </div>
+  <div class="table-scroll"><table class="fin-table" id="tbl-vue-livrable"></table></div>
+
+<div class="manage-toggle" id="manage-toggle"><span class="chev">▸</span> Gérer les données (livrables, vue consultant, heures)</div>
+<div class="manage-panel" id="manage-panel">
+  <div class="mtabs">
+    <button class="mtab-btn active" data-m="livrables">Livrables</button>
+    <button class="mtab-btn" data-m="consultantview">Vue consultant</button>
+    <button class="mtab-btn" data-m="heures">Suivi heures</button>
+    <button class="reset-btn" id="reset-btn">Réinitialiser les données d'exemple</button>
+  </div>
+
+  <div class="msection active" id="m-livrables">
+    <div class="filter-bar">
+      <input type="text" id="liv-search" placeholder="Rechercher (étude, livrable)…">
+      <select id="liv-filter-consultant"><option value="">Tous les consultants</option></select>
+      <select id="liv-filter-statut">
+        <option value="">Tous les statuts</option>
+        <option value="oncours">En cours</option>
+        <option value="risque">À risque</option>
+        <option value="retard">En retard</option>
+        <option value="livre">Livré</option>
+      </select>
+    </div>
+    <div class="table-scroll"><table class="edit-table" id="tbl-livrables"></table></div>
+    <button class="add-row-btn" id="add-livrable">+ Ajouter un livrable</button>
+    <label class="reset-btn" style="cursor:pointer;display:inline-flex;">📥 Importer un Excel<input type="file" id="import-livrables" accept=".xlsx,.xls" style="display:none;"></label>
+    <p class="muted small" style="margin-top:6px;">Colonnes attendues (1ère ligne d'en-têtes) : Étude, Livrable, Type, Complexité, Prix, Réalisateur, Relecteur, Date complétion, Plan Delivery Date, Durée, Département, Interlocuteur, Commentaire.</p>
+  </div>
+  <div class="msection" id="m-consultantview">
+    <div class="filter-bar">
+      <select id="cv-select-consultant"></select>
+      <select id="cv-filter-role">
+        <option value="">Réalisation + Relecture</option>
+        <option value="R">Réalisation uniquement</option>
+        <option value="L">Relecture uniquement</option>
+      </select>
+    </div>
+    <div class="table-scroll"><table class="edit-table" id="tbl-consultant-view"></table></div>
+  </div>
+  <div class="msection" id="m-heures">
+    <div class="filter-bar">
+      <select id="heures-filter-consultant"><option value="">Tous les consultants</option></select>
+      <select id="heures-filter-livrable"><option value="">Tous les livrables</option></select>
+    </div>
+    <div class="table-scroll"><table class="edit-table" id="tbl-heures"></table></div>
+    <button class="add-row-btn" id="add-heure">+ Ajouter une saisie</button>
+  </div>
+</div>
+
+</div>
+
+<div class="main-panel" id="panel-facturation">
+  <div class="kpis" id="fact-kpis"></div>
+  <div class="filter-bar">
+    <select id="fact-filter-statut">
+      <option value="">Tous les livrables livrés</option>
+      <option value="nonfacture">Non facturé</option>
+      <option value="partiel">Partiellement facturé</option>
+      <option value="complet">Facturé intégralement</option>
+    </select>
+    <select id="fact-filter-departement"><option value="">Tous les départements</option></select>
+  </div>
+  <div class="table-scroll"><table class="fin-table" id="tbl-facturation"></table></div>
+  <p class="note">Seuls les livrables livrés peuvent être facturés. Une étude peut être facturée en plusieurs fois (facturation initiale, puis surcoûts découverts plus tard) : chaque ligne "Reste à facturer" reste modifiable à tout moment pour ajouter une nouvelle facture.</p>
+</div>
+
+<div class="main-panel" id="panel-historique">
+  <div class="hist-controls">
+    <div class="tabs" id="hist-gran-tabs">
+      <button class="tab-btn active" data-gran="mois">Mois</button>
+      <button class="tab-btn" data-gran="trimestre">Trimestre</button>
+      <button class="tab-btn" data-gran="semestre">Semestre</button>
+      <button class="tab-btn" data-gran="annee">Année</button>
+    </div>
+    <div class="tabs" id="hist-base-tabs">
+      <button class="tab-btn active" data-base="pdd">Plan Delivery Date</button>
+      <button class="tab-btn" data-base="delivery">Delivery Date</button>
+      <button class="tab-btn" data-base="facturation">Date de facturation</button>
+    </div>
+    <div class="fin-period">
+      <label class="muted small">Fenêtre d'affichage du graphique :</label>
+      <input type="date" id="hist-period-start"> <span class="muted">→</span> <input type="date" id="hist-period-end">
+    </div>
+    <button class="reset-btn" id="hist-print-btn">🖨️ Vue impression / export PPT</button>
+  </div>
+  <div class="hist-controls">
+    <div class="fin-period">
+      <label class="muted small">Filtrer l'analyse par :</label>
+      <select id="hist-filter-consultant"><option value="">Tous les consultants</option></select>
+      <select id="hist-filter-departement"><option value="">Tous les départements</option></select>
+    </div>
+  </div>
+  <p class="muted small">L'analyse (KPI, tableaux) porte toujours sur l'ensemble des données. Seule la fenêtre de dates ci-dessus recadre l'affichage du graphique.</p>
+  <div class="kpis" id="hist-kpis"></div>
+  <div class="fin-section">
+    <h2 class="fin-h2" id="hist-chart-title">Chiffre d'affaires par période</h2>
+    <div id="hist-chart"></div>
+  </div>
+  <div class="fin-section">
+    <h2 class="fin-h2">Analyse par type d'étude</h2>
+    <p class="fin-sub">Sur l'ensemble des données (indépendant de la fenêtre du graphique ci-dessus).</p>
+    <div class="table-scroll"><table class="fin-table" id="tbl-type-stats"></table></div>
+    <div id="hist-type-chart" style="margin-top:14px;"></div>
+  </div>
+  <div class="fin-section">
+    <h2 class="fin-h2">Budget par département / bon de commande</h2>
+    <p class="fin-sub">Suivi du budget consommé par département et par bon de commande global.</p>
+    <div class="table-scroll"><table class="edit-table" id="tbl-bc"></table></div>
+    <button class="add-row-btn" id="add-bc">+ Ajouter un bon de commande</button>
+    <div class="table-scroll" style="margin-top:14px;"><table class="fin-table" id="tbl-budget-dept"></table></div>
+  </div>
+  <div class="fin-section">
+    <h2 class="fin-h2">Listing des études</h2>
+    <div class="table-scroll"><table class="fin-table" id="tbl-hist-listing"></table></div>
+  </div>
+</div>
+
+<div class="main-panel active" id="panel-technique">
+
+<div class="kpis" id="kpis"></div>
+
+<div class="toolbar">
+  <div class="tabgroup">
+    <div class="tabs" id="view-tabs">
+      <button class="tab-btn active" data-view="consultant">Vue consultant</button>
+      <button class="tab-btn" data-view="etude">Vue étude</button>
+    </div>
+    <div class="tabs" id="zoom-tabs">
+      <button class="tab-btn" data-zoom="jour">Jour</button>
+      <button class="tab-btn" data-zoom="semaine">Semaine</button>
+      <button class="tab-btn active" data-zoom="mois">Mois</button>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><span class="swatch" style="background:var(--onTrack)"></span>En cours (dans les temps)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--amber)"></span>À risque</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--coral)"></span>En retard</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--teal)"></span>Livré</div>
+    <div class="legend-item"><span class="swatch relect"></span>Relecture</div>
+    <div class="legend-item">◇ Livraison réelle</div>
+    <div class="legend-item">┊ Plan Delivery Date</div>
+  </div>
+</div>
+
+<div class="cal-nav" id="cal-nav">
+  <button class="icon-btn" id="cal-prev" title="Précédent">◂</button>
+  <span class="cal-label" id="cal-label"></span>
+  <button class="icon-btn" id="cal-next" title="Suivant">▸</button>
+  <button class="reset-btn" id="cal-today">Aujourd'hui</button>
+</div>
+
+<div class="board">
+  <div class="board-inner" id="board-inner">
+    <div class="labels-col" id="labels-col"></div>
+    <div class="timeline-scroll" id="timeline-scroll">
+      <div class="timeline-inner" id="timeline-inner">
+        <div class="ruler" id="ruler"></div>
+        <div id="rows-container"></div>
+      </div>
+    </div>
+  </div>
+  <div class="calendar-container" id="calendar-container"></div>
+</div>
+
+<div class="conflicts" id="conflicts"></div>
+
+<p class="note">
+  Les dates de réalisation et de relecture sont calculées jour par jour, en simulant la charge réelle de chaque consultant : un consultant ne peut avancer que sur une seule tâche par jour ouvré, et la relecture d'un livrable ne peut démarrer qu'une fois sa réalisation terminée. L'ordre de traitement suit la priorité de chaque livrable (modifiable dans la gestion des données, colonne « Prio. », flèches ↑↓). Si une tâche plus prioritaire devient disponible pendant qu'un consultant est en cours sur une tâche moins urgente, elle interrompt cette dernière — la réalisation reprend ensuite là où elle s'était arrêtée (visible comme un fractionnement de la barre, en vue consultant). Un retard pris par un réalisateur décale donc mécaniquement la relecture correspondante, et tous les livrables suivants en file d'attente chez les mêmes consultants. Deux tâches ne peuvent jamais se chevaucher pour une même personne : c'est garanti par construction du calcul, quel que soit le jeu de données.
+</p>
+
+</div>
+
+<div class="main-panel" id="panel-financier">
+
+  <div class="kpis" id="fin-kpis"></div>
+
+  <div class="fin-section">
+    <h2 class="fin-h2">Rentabilité par étude</h2>
+    <p class="fin-sub">Prix vendu (référentiel, surfacturations incluses) comparé au coût de revient réel (heures pointées × coût horaire chargé de chaque intervenant).</p>
+    <div class="table-scroll"><table class="fin-table" id="tbl-etude-renta"></table></div>
+  </div>
+
+  <div class="fin-section">
+    <h2 class="fin-h2">Rentabilité par type d'étude</h2>
+    <p class="fin-sub">Même logique, agrégée par type d'étude plutôt que par étude individuelle.</p>
+    <div class="table-scroll"><table class="fin-table" id="tbl-type-renta"></table></div>
+  </div>
+
+  <div class="fin-section">
+    <h2 class="fin-h2">Rentabilité par livrable</h2>
+    <p class="fin-sub">Détail livrable par livrable.</p>
+    <div class="table-scroll"><table class="fin-table" id="tbl-livrable-renta"></table></div>
+  </div>
+
+  <div class="fin-section">
+    <h2 class="fin-h2">Rentabilité par consultant</h2>
+    <p class="fin-sub">Chiffre d'affaires généré = part du prix final de chaque livrable (surfacturations incluses) attribuée au consultant selon la répartition réalisation/relecture fixée par type d'étude, proratisée par l'avancement réel de sa phase. <b>Marge occupée</b> = CA généré − coût des seules heures effectivement travaillées. <b>Marge globale</b> = CA généré − coût de la capacité totale disponible sur la période (intègre le coût des périodes d'inactivité / bench).</p>
+    <div class="fin-period">
+      <label>Période d'analyse (occupation + marge globale) :</label>
+      <input type="date" id="fin-period-start"> <span class="muted">→</span> <input type="date" id="fin-period-end">
+    </div>
+    <div class="table-scroll"><table class="fin-table" id="tbl-consultant-renta"></table></div>
+  </div>
+
+</div>
+
+<div class="main-panel" id="panel-equipe">
+  <p class="fin-sub manager-note">Espace manager — visible par tous pour le moment ; l'accès sera restreint aux managers dans une prochaine étape.</p>
+  <div class="table-scroll"><table class="edit-table" id="tbl-equipe"></table></div>
+  <button class="add-row-btn" id="add-equipe">+ Ajouter un consultant</button>
+  <p class="muted small" style="margin-top:10px;">Coût horaire chargé = salaire mensuel brut × 12 × 1,61 / (218 jours ouvrés/an × capacité jour). C'est ce coût qui alimente tous les calculs de rentabilité.</p>
+</div>
+
+<div class="main-panel" id="panel-referentiel">
+  <p class="fin-sub manager-note">Espace manager — visible par tous pour le moment ; l'accès sera restreint aux managers dans une prochaine étape.</p>
+  <div class="table-scroll"><table class="edit-table" id="tbl-referentiel"></table></div>
+  <button class="add-row-btn" id="add-referentiel">+ Ajouter une ligne</button>
+  <label class="reset-btn" style="cursor:pointer;display:inline-flex;">📥 Importer un Excel<input type="file" id="import-referentiel" accept=".xlsx,.xls" style="display:none;"></label>
+  <p class="muted small" style="margin-top:6px;">Colonnes attendues (1ère ligne d'en-têtes) : Type, Complexité, Prix, Durée.</p>
+  <h3 class="fin-h2" style="margin-top:26px;font-size:13.5px;">Répartition réalisation / relecture par type de livrable</h3>
+  <p class="fin-sub">Fixe, pour chaque type d'étude, la part du temps total consacrée à la réalisation (le reste va à la relecture). Sert à calculer la durée estimée de chaque phase et l'attribution du chiffre d'affaires par consultant.</p>
+  <div class="table-scroll"><table class="edit-table" id="tbl-splits"></table></div>
+</div>
+
+
+<p class="note" id="shared-note">Ces données sont stockées dans un espace partagé : toute personne ouvrant cet outil peut les consulter et les modifier.</p>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const dayMs = 86400000;
+function d(s){ return s ? new Date(s+"T00:00:00") : null; }
+function iso(dt){ return dt.toISOString().slice(0,10); }
+function todayMidnight(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
+
+let TEAM = [], REFERENTIEL = [], SPLITS = [], LIVRABLES = [], HEURES = [], BONS_COMMANDE = [];
+let currentView = 'consultant';
+let currentZoom = 'mois';
+let pinnedId = null;
+
+function seedData(){
+  TEAM = [
+    {nom:"Mathieu Dupont", salaire:4200, capaciteJour:7},
+    {nom:"Sophie Laurent", salaire:5200, capaciteJour:7},
+    {nom:"Julien Petit", salaire:3900, capaciteJour:7},
+    {nom:"Claire Moreau", salaire:4800, capaciteJour:7},
+  ];
+  REFERENTIEL = [
+    {type:"Etude de stabilité", cpx:"Basse", prix:1800, duree:12},{type:"Etude de stabilité", cpx:"Moyenne", prix:3000, duree:20},{type:"Etude de stabilité", cpx:"Haute", prix:4300, duree:29},
+    {type:"Etude géotechnique", cpx:"Basse", prix:1500, duree:10},{type:"Etude géotechnique", cpx:"Moyenne", prix:2600, duree:17},{type:"Etude géotechnique", cpx:"Haute", prix:3800, duree:25},
+    {type:"Etude structure", cpx:"Basse", prix:2200, duree:15},{type:"Etude structure", cpx:"Moyenne", prix:3600, duree:24},{type:"Etude structure", cpx:"Haute", prix:5000, duree:33},
+    {type:"Etude thermique", cpx:"Basse", prix:1200, duree:8},{type:"Etude thermique", cpx:"Moyenne", prix:2000, duree:13},{type:"Etude thermique", cpx:"Haute", prix:2900, duree:19},
+    {type:"Etude acoustique", cpx:"Basse", prix:1000, duree:7},{type:"Etude acoustique", cpx:"Moyenne", prix:1800, duree:12},{type:"Etude acoustique", cpx:"Haute", prix:2600, duree:17},
+    {type:"Etude environnementale", cpx:"Basse", prix:1600, duree:11},{type:"Etude environnementale", cpx:"Moyenne", prix:2800, duree:18},{type:"Etude environnementale", cpx:"Haute", prix:4000, duree:26},
+  ];
+  SPLITS = [...new Set(REFERENTIEL.map(r=>r.type))].map(type=>({type, pctReal:70}));
+  LIVRABLES = [
+    {id:1, etude:"Etude Immeuble A", nom:"Note de calcul stabilité", type:"Etude de stabilité", cpx:"Haute", prix:4300, realisateur:"Mathieu Dupont", relecteur:"Sophie Laurent", dc:"2026-06-01", plan:"2026-07-15", delivery:"2026-07-20", duree:23, priority:1},
+    {id:2, etude:"Etude Immeuble A", nom:"Note géotechnique", type:"Etude géotechnique", cpx:"Moyenne", prix:2600, realisateur:"Julien Petit", relecteur:"Claire Moreau", dc:"2026-06-01", plan:"2026-07-10", delivery:"2026-07-08", duree:14, priority:2},
+    {id:3, etude:"Etude Pont B", nom:"Note de calcul structure", type:"Etude structure", cpx:"Haute", prix:5000, realisateur:"Sophie Laurent", relecteur:"Mathieu Dupont", dc:"2026-05-10", plan:"2026-06-30", delivery:"2026-06-28", duree:32, priority:3},
+    {id:4, etude:"Etude Pont B", nom:"Note thermique", type:"Etude thermique", cpx:"Basse", prix:1200, realisateur:"Claire Moreau", relecteur:"Julien Petit", dc:"2026-05-10", plan:"2026-06-15", delivery:null, duree:17, priority:4},
+    {id:5, etude:"Etude Usine C", nom:"Etude acoustique", type:"Etude acoustique", cpx:"Moyenne", prix:1800, realisateur:"Mathieu Dupont", relecteur:"Claire Moreau", dc:"2026-07-01", plan:"2026-09-01", delivery:null, duree:17, priority:5},
+    {id:6, etude:"Etude Usine C", nom:"Etude environnementale", type:"Etude environnementale", cpx:"Haute", prix:4000, realisateur:"Julien Petit", relecteur:"Sophie Laurent", dc:"2026-07-01", plan:"2026-08-10", delivery:null, duree:21, priority:6},
+    {id:7, etude:"Etude Résidence D", nom:"Note de calcul stabilité", type:"Etude de stabilité", cpx:"Basse", prix:1800, realisateur:"Sophie Laurent", relecteur:"Julien Petit", dc:"2026-07-15", plan:"2026-08-30", delivery:null, duree:12, priority:7},
+    {id:8, etude:"Etude Résidence D", nom:"Note géotechnique", type:"Etude géotechnique", cpx:"Basse", prix:1500, realisateur:"Claire Moreau", relecteur:"Mathieu Dupont", dc:"2026-07-15", plan:"2026-08-05", delivery:null, duree:12, priority:8},
+    {id:9, etude:"Etude Tour E", nom:"Note de calcul structure", type:"Etude structure", cpx:"Moyenne", prix:3600, realisateur:"Mathieu Dupont", relecteur:"Sophie Laurent", dc:"2026-08-01", plan:"2026-09-20", delivery:null, duree:19, priority:9},
+    {id:10, etude:"Etude Tour E", nom:"Note thermique", type:"Etude thermique", cpx:"Moyenne", prix:2000, realisateur:"Julien Petit", relecteur:"Claire Moreau", dc:"2026-08-01", plan:"2026-09-10", delivery:null, duree:14, priority:10},
+  ];
+  HEURES = [
+    {id:1, date:"2026-07-03", consultant:"Mathieu Dupont", livrableId:1, tache:"Réalisation", heures:20},
+    {id:2, date:"2026-07-18", consultant:"Sophie Laurent", livrableId:1, tache:"Relecture", heures:3},
+    {id:3, date:"2026-07-05", consultant:"Julien Petit", livrableId:2, tache:"Réalisation", heures:12},
+    {id:4, date:"2026-07-07", consultant:"Claire Moreau", livrableId:2, tache:"Relecture", heures:2},
+    {id:5, date:"2026-06-20", consultant:"Sophie Laurent", livrableId:3, tache:"Réalisation", heures:28},
+    {id:6, date:"2026-06-27", consultant:"Mathieu Dupont", livrableId:3, tache:"Relecture", heures:4},
+    {id:7, date:"2026-06-10", consultant:"Claire Moreau", livrableId:4, tache:"Réalisation", heures:8},
+    {id:8, date:"2026-08-04", consultant:"Mathieu Dupont", livrableId:5, tache:"Réalisation", heures:6},
+    {id:9, date:"2026-08-10", consultant:"Julien Petit", livrableId:6, tache:"Réalisation", heures:15},
+    {id:10, date:"2026-08-12", consultant:"Sophie Laurent", livrableId:7, tache:"Réalisation", heures:5},
+    {id:11, date:"2026-07-20", consultant:"Claire Moreau", livrableId:8, tache:"Réalisation", heures:9},
+    {id:12, date:"2026-08-15", consultant:"Mathieu Dupont", livrableId:9, tache:"Réalisation", heures:4},
+    {id:13, date:"2026-08-18", consultant:"Julien Petit", livrableId:10, tache:"Réalisation", heures:6},
+    {id:14, date:"2026-07-25", consultant:"Mathieu Dupont", livrableId:5, tache:"Réalisation", heures:5},
+    {id:15, date:"2026-08-01", consultant:"Julien Petit", livrableId:4, tache:"Réalisation", heures:3},
+  ];
+}
+
+// ---------------- storage ----------------
+const STORAGE_KEY = "plateau_data_v1";
+const JOURS_OUVRES_AN = 218;
+const MULTIPLICATEUR_CHARGES = 1.61;
+function coutHoraireCharge(person){
+  if(!person) return 0;
+  const cap = Number(person.capaciteJour)||7;
+  return (Number(person.salaire)||0) * 12 * MULTIPLICATEUR_CHARGES / (JOURS_OUVRES_AN * cap);
+}
+function splitFor(type){
+  const s = SPLITS.find(x=>x.type===type);
+  const pctReal = s ? s.pctReal : 70;
+  return {pctReal, pctRelect: 100-pctReal};
+}
+function estHoursReal(l){ return (Number(l.duree)||0) * splitFor(l.type).pctReal/100; }
+function estHoursRelect(l){ return (Number(l.duree)||0) * splitFor(l.type).pctRelect/100; }
+function migrateData(){
+  // anciennes données : pas de table de répartition -> 70/30 par défaut pour chaque type connu
+  const knownTypes = [...new Set([...REFERENTIEL.map(r=>r.type), ...LIVRABLES.map(l=>l.type)])];
+  knownTypes.forEach(type=>{
+    if(!SPLITS.find(s=>s.type===type)) SPLITS.push({type, pctReal:70});
+  });
+  // anciennes lignes de référentiel sans durée par défaut
+  REFERENTIEL.forEach(r=>{ if(r.duree===undefined || r.duree===null) r.duree = 12; });
+  // anciens consultants : taux horaire manuel -> salaire mensuel brut équivalent (approximatif)
+  TEAM.forEach(p=>{
+    if(p.salaire===undefined || p.salaire===null){
+      const cap = Number(p.capaciteJour)||7;
+      p.salaire = p.taux ? Math.round(Number(p.taux)*JOURS_OUVRES_AN*cap/(12*MULTIPLICATEUR_CHARGES)) : 4000;
+    }
+  });
+  // anciens livrables : hRest/hLest séparés -> durée totale unique
+  LIVRABLES.forEach(l=>{
+    if(l.duree===undefined || l.duree===null){
+      l.duree = (Number(l.hRest)||0) + (Number(l.hLest)||0);
+      if(!l.duree) l.duree = 10;
+    }
+    if(l.interlocuteur===undefined) l.interlocuteur = '';
+    if(l.departement===undefined) l.departement = '';
+    if(l.commentaire===undefined) l.commentaire = '';
+    if(!Array.isArray(l.surfacturations)) l.surfacturations = [];
+    if(l.relectureAnticipee===undefined) l.relectureAnticipee = null;
+    if(l.erreurAixial===undefined) l.erreurAixial = false;
+    if(!Array.isArray(l.factures)) l.factures = [];
+    if(l.bonCommande===undefined) l.bonCommande = '';
+  });
+  // priorités : renumérotation systématique 1..N pour éviter toute dérive après des
+  // suppressions/ajouts successifs (les numéros affichés doivent toujours être continus).
+  renumberPriorities();
+}
+async function loadData(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, true);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      TEAM = parsed.team || []; REFERENTIEL = parsed.referentiel || [];
+      SPLITS = parsed.splits || []; LIVRABLES = parsed.livrables || []; HEURES = parsed.heures || [];
+      BONS_COMMANDE = parsed.bonsCommande || [];
+      migrateData();
+      setStorageStatus(true, "Données partagées chargées");
+    } else {
+      seedData();
+      migrateData();
+      await saveData();
+      setStorageStatus(true, "Données d'exemple initialisées");
+    }
+  }catch(e){
+    seedData();
+    migrateData();
+    setStorageStatus(false, "Stockage indisponible — données en mémoire locale (non partagées)");
+  }
+  renderAll();
+}
+async function saveData(){
+  try{
+    const payload = JSON.stringify({team:TEAM, referentiel:REFERENTIEL, splits:SPLITS, livrables:LIVRABLES, heures:HEURES, bonsCommande:BONS_COMMANDE});
+    const res = await window.storage.set(STORAGE_KEY, payload, true);
+    if(!res) setStorageStatus(false, "Échec de la sauvegarde partagée");
+    else setStorageStatus(true, "Données partagées — synchronisées");
+  }catch(e){
+    setStorageStatus(false, "Échec de la sauvegarde partagée");
+  }
+}
+function setStorageStatus(ok, text){
+  document.getElementById('storage-dot').classList.toggle('loading', !ok);
+  document.getElementById('storage-text').textContent = text;
+}
+
+// ---------------- scheduling engine ----------------
+function isWeekend(dt){ return dt.getDay()===0 || dt.getDay()===6; }
+function businessDayOrAfter(dt){ let c=new Date(dt.getTime()); while(isWeekend(c)) c=new Date(c.getTime()+dayMs); return c; }
+function nextBusinessDay(dt){ let c=new Date(dt.getTime()+dayMs); while(isWeekend(c)) c=new Date(c.getTime()+dayMs); return c; }
+function atNine(day){ const nd=new Date(day.getTime()); nd.setHours(9,0,0,0); return nd; }
+function dateOnly(dt){ return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()); }
+
+// Journée type : 9h-12h puis 13h-17h (7h, pause déjeuner) — s'étend au-delà de 17h
+// si la capacité d'un consultant dépasse 7h/jour.
+const FIXED_HOURS = [9,10,11,13,14,15,16,17,18,19];
+function personHasSlot(person, hour){
+  const idx = FIXED_HOURS.indexOf(hour);
+  const cap = Math.max(1, Math.round(person.capaciteJour));
+  return idx>=0 && idx<cap;
+}
+function nextPersonalSlot(dt, person){
+  let day = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const cap = Math.max(1, Math.round(person.capaciteJour));
+  let idx = FIXED_HOURS.indexOf(dt.getHours()) + 1;
+  if(idx >= cap){ day = nextBusinessDay(day); idx = 0; }
+  const nd = new Date(day.getTime()); nd.setHours(FIXED_HOURS[idx],0,0,0); return nd;
+}
+function nextGlobalTick(dt){
+  let day = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  let idx = FIXED_HOURS.indexOf(dt.getHours()) + 1;
+  if(idx >= FIXED_HOURS.length){ day = nextBusinessDay(day); idx = 0; }
+  const nd = new Date(day.getTime()); nd.setHours(FIXED_HOURS[idx],0,0,0); return nd;
+}
+
+function hoursFor(livrableId, tache){
+  return HEURES.filter(h=>h.livrableId===livrableId && h.tache===tache).reduce((s,h)=>s+Number(h.heures||0),0);
+}
+function capOf(nom){ const t=TEAM.find(t=>t.nom===nom); return t ? t.capaciteJour : 7; }
+
+// Simulation HEURE PAR HEURE, préemptive par priorité : un consultant ne travaille jamais
+// que sur UNE seule tâche à la fois, à la résolution de l'heure (journée type 9h-12h / 13h-17h).
+// Si une tâche plus prioritaire devient prête en cours de journée (ex : une relecture urgente
+// débloquée par la fin d'une réalisation ailleurs), elle interrompt la tâche en cours chez ce
+// consultant — y compris au milieu d'une journée — qui reprend ensuite là où il en était.
+// Cette contrainte garantit qu'aucun consultant ne peut jamais se retrouver affecté à deux
+// tâches sur le même créneau horaire (impossible par construction, quel que soit le jeu de données).
+function computeScheduleRaw(){
+  const TODAY_FLOOR_DAY = businessDayOrAfter(todayMidnight());
+  const laterOf = (a,b)=> a>b?a:b;
+  const tasks = [];
+  LIVRABLES.forEach(l=>{
+    const delivered = !!l.delivery;
+    let hR, hL, rEarliest;
+    if(delivered){
+      hR = hoursFor(l.id,"Réalisation")||estHoursReal(l)||1;
+      hL = hoursFor(l.id,"Relecture")||estHoursRelect(l)||1;
+      rEarliest = atNine(businessDayOrAfter(d(l.dc)));
+    } else {
+      // travail restant = estimation (durée totale × répartition du type) - heures déjà pointées ;
+      // le travail qui reste à faire ne peut jamais être simulé dans le passé, même si la demande est ancienne.
+      hR = Math.max((estHoursReal(l)||1) - hoursFor(l.id,"Réalisation"), 0);
+      hL = Math.max((estHoursRelect(l)||1) - hoursFor(l.id,"Relecture"), 0);
+      rEarliest = atNine(laterOf(businessDayOrAfter(d(l.dc)), TODAY_FLOOR_DAY));
+    }
+    // seuil de relecture anticipée : % de la réalisation (en heures) au-delà duquel la
+    // relecture peut démarrer même si la réalisation n'est pas terminée. null/absent = 100%
+    // (comportement par défaut : la relecture attend la fin complète de la réalisation).
+    const seuil = (l.relectureAnticipee!=null && l.relectureAnticipee!=='') ? Number(l.relectureAnticipee) : 100;
+    tasks.push({lid:l.id, type:'R', resource:l.realisateur, priority:l.priority||l.id,
+      earliestStart:rEarliest, remaining:hR, totalEst:hR, seuilAnticipe:seuil, unlocked:false,
+      started:null, ended:null, segments:[]});
+    tasks.push({lid:l.id, type:'L', resource:l.relecteur, priority:l.priority||l.id,
+      earliestStart:null, remaining:hL, started:null, ended:null, segments:[]});
+  });
+
+  tasks.forEach(t=>{
+    if(t.type==='R' && t.remaining<=0){ t.started=t.earliestStart; t.ended=t.earliestStart; t.segments=[]; }
+  });
+
+  if(!LIVRABLES.length) return tasks;
+  let simDay = businessDayOrAfter(new Date(Math.min(...LIVRABLES.map(l=>d(l.dc).getTime()))));
+  const guardLimitDays = 800;
+  let guardDays = 0;
+  const allDone = () => tasks.every(t=> t.remaining<=0);
+
+  function maybeUnlockRelecture(task, slotDT){
+    // débloque la tâche de relecture associée dès que le seuil de progression est atteint
+    // (100% par défaut = comportement historique : attendre la fin complète).
+    if(task.type!=='R' || task.unlocked) return;
+    const progressPct = task.totalEst>0 ? (1 - task.remaining/task.totalEst)*100 : 100;
+    if(progressPct + 1e-6 < task.seuilAnticipe) return;
+    task.unlocked = true;
+    const lTask = tasks.find(t=>t.lid===task.lid && t.type==='L');
+    if(lTask && lTask.earliestStart===null){
+      lTask.earliestStart = nextGlobalTick(slotDT);
+      if(lTask.remaining<=0){ lTask.started=lTask.earliestStart; lTask.ended=lTask.earliestStart; lTask.segments=[]; }
+    }
+  }
+
+  while(!allDone() && guardDays<guardLimitDays){
+    guardDays++;
+    for(const hour of FIXED_HOURS){
+      if(allDone()) break;
+      const slotDT = new Date(simDay.getTime()); slotDT.setHours(hour,0,0,0);
+      TEAM.forEach(person=>{
+        if(!personHasSlot(person, hour)) return;
+        const ready = tasks.filter(t=> t.resource===person.nom && t.remaining>0 && t.earliestStart && t.earliestStart<=slotDT);
+        if(!ready.length) return;
+        ready.sort((a,b)=> (a.priority-b.priority) || (a.earliestStart-b.earliestStart));
+        const task = ready[0];
+        if(task.started===null) task.started = new Date(slotDT.getTime());
+        const last = task.segments[task.segments.length-1];
+        if(last && nextPersonalSlot(last.end, person).getTime()===slotDT.getTime()){
+          last.end = new Date(slotDT.getTime());
+          last.hours.push(new Date(slotDT.getTime()));
+        } else {
+          task.segments.push({start:new Date(slotDT.getTime()), end:new Date(slotDT.getTime()), hours:[new Date(slotDT.getTime())]});
+        }
+        task.remaining -= 1;
+        if(task.type==='R') maybeUnlockRelecture(task, slotDT);
+        if(task.remaining <= 0.0001){
+          task.ended = new Date(slotDT.getTime());
+          if(task.type==='R') maybeUnlockRelecture(task, slotDT);
+        }
+      });
+    }
+    simDay = nextBusinessDay(simDay);
+  }
+  return tasks;
+}
+
+function computeSchedule(){
+  const tasks = computeScheduleRaw();
+  const results = {};
+  LIVRABLES.forEach(l=>{
+    const rt = tasks.find(t=>t.lid===l.id && t.type==='R');
+    const lt = tasks.find(t=>t.lid===l.id && t.type==='L');
+    results[l.id] = {
+      rStart: rt && rt.started, rEnd: rt && rt.ended,
+      lStart: lt && lt.started, lEnd: lt && lt.ended,
+      rSegments: rt ? rt.segments : [], lSegments: lt ? lt.segments : [],
+      projected: !l.delivery
+    };
+  });
+  return results;
+}
+
+function computeStatus(l, sched){
+  const TODAY = todayMidnight();
+  const planD = d(l.plan);
+  if(l.delivery){
+    const deliveryD = d(l.delivery);
+    return deliveryD<=planD ? {key:'livre', label:'Livré à temps'} : {key:'livre', label:'Livré en retard'};
+  }
+  if(TODAY > planD) return {key:'retard', label:'En retard'};
+  const s = sched[l.id];
+  if(s && s.lEnd && planD && dateOnly(s.lEnd) > planD) return {key:'risque', label:'À risque (planning dépassé)'};
+  return {key:'oncours', label:'En cours'};
+}
+
+function businessDaysBetween(start,end){
+  let n=0, c=new Date(start.getTime());
+  while(c<=end){ if(!isWeekend(c)) n++; c=new Date(c.getTime()+dayMs); }
+  return n;
+}
+function occupancyRate(personName, periodStart, periodEnd){
+  const tasks = computeScheduleRaw();
+  const busy = new Set();
+  tasks.forEach(t=>{
+    if(t.resource!==personName) return;
+    t.segments.forEach(seg=>{
+      let c = new Date(Math.max(seg.start.getTime(), periodStart.getTime()));
+      const e = new Date(Math.min(seg.end.getTime(), periodEnd.getTime()));
+      while(c<=e){ if(!isWeekend(c)) busy.add(iso(c)); c=new Date(c.getTime()+dayMs); }
+    });
+  });
+  const total = businessDaysBetween(periodStart,periodEnd);
+  return total>0 ? busy.size/total : 0;
+}
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function firstName(fullName){ return String(fullName||'').trim().split(' ')[0] || fullName || ''; }
+
+// ---------------- render: Gantt ----------------
+const ZOOM_PX = {jour:42, semaine:16, mois:6.2};
+const monthNames = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+const wdLetters = ["D","L","M","M","J","V","S"];
+
+function getRange(sched){
+  let dates = [];
+  LIVRABLES.forEach(l=>{
+    dates.push(d(l.dc)); dates.push(d(l.plan));
+    if(l.delivery) dates.push(d(l.delivery));
+    const s = sched[l.id];
+    if(s){ if(s.rStart) dates.push(s.rStart); if(s.lEnd) dates.push(s.lEnd); }
+  });
+  dates = dates.filter(dt=> dt instanceof Date && !isNaN(dt));
+  if(!dates.length) dates.push(todayMidnight());
+  dates.push(todayMidnight());
+  let min = new Date(Math.min(...dates)), max = new Date(Math.max(...dates));
+  min = new Date(min.getTime()-6*dayMs); max = new Date(max.getTime()+10*dayMs);
+  return {min,max};
+}
+
+function collide(items){
+  const sorted=[...items].sort((a,b)=>a.start-b.start);
+  const laneEnds=[];
+  sorted.forEach(it=>{
+    let placed=false;
+    for(let i=0;i<laneEnds.length;i++){
+      if(laneEnds[i] <= it.start.getTime()){ it.lane=i; laneEnds[i]=it.end.getTime()+dayMs; placed=true; break; }
+    }
+    if(!placed){ it.lane=laneEnds.length; laneEnds.push(it.end.getTime()+dayMs); }
+  });
+  return laneEnds.length || 1;
+}
+
+const ROW_H=34, BAR_H=24;
+
+function mondayOf(dt){ const day=dt.getDay(); const diff=(day===0?-6:1-day); return new Date(dt.getTime()+diff*dayMs); }
+let calAnchor = todayMidnight();
+
+function getCalendarDays(){
+  if(currentZoom==='jour') return [new Date(calAnchor.getTime())];
+  if(currentZoom==='semaine'){ const mon=mondayOf(calAnchor); return [0,1,2,3,4].map(i=> new Date(mon.getTime()+i*dayMs)); }
+  return [];
+}
+function calLabel(){
+  if(currentZoom==='jour') return calAnchor.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  if(currentZoom==='semaine'){
+    const mon=mondayOf(calAnchor), fri=new Date(mon.getTime()+4*dayMs);
+    return `Semaine du ${mon.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})} au ${fri.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}`;
+  }
+  return '';
+}
+const wdShort = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+
+function renderGantt(){
+  const navEl = document.getElementById('cal-nav');
+  const boardInner = document.getElementById('board-inner');
+  const calContainer = document.getElementById('calendar-container');
+  if(currentZoom==='mois'){
+    navEl.style.display='none';
+    calContainer.style.display='none';
+    boardInner.style.display='flex';
+    renderGanttContinuous();
+  } else {
+    navEl.style.display='flex';
+    boardInner.style.display='none';
+    calContainer.style.display='block';
+    document.getElementById('cal-label').textContent = calLabel();
+    if(currentZoom==='jour') renderDayHourGrid(calAnchor);
+    else renderWeekGrid(getCalendarDays());
+  }
+}
+
+function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function hoursOfTaskOnDay(task, day){
+  const hrs = [];
+  task.segments.forEach(sg=> sg.hours.forEach(h=>{ if(sameDay(h,day)) hrs.push(h); }));
+  hrs.sort((a,b)=>a-b);
+  return hrs;
+}
+function fmtHourRange(hrs){
+  if(!hrs.length) return '';
+  const first = hrs[0].getHours(), last = hrs[hrs.length-1].getHours();
+  return first===last ? `${first}h` : `${first}h–${last+1}h`;
+}
+function chipHtml(l, taskType, hourLabel){
+  const cls = 'status-'+statusCache(l) + (taskType==='L' ? ' relecture' : '');
+  const prefix = hourLabel ? `${hourLabel} · ` : '';
+  return `<span class="cal-chip ${cls}" onclick="pinFromCalendar(${l.id})" onmouseenter="showTooltipFor(event,${l.id})" onmousemove="positionTooltip(event)" onmouseleave="hideTooltipMaybe()" title="${escapeHtml(l.nom)}">${prefix}${taskType==='R'?'Réal.':'Rel.'} ${escapeHtml(l.nom)}</span>`;
+}
+let _statusCacheSched = null;
+function statusCache(l){ return computeStatus(l, _statusCacheSched).key; }
+
+function halfHours(){
+  const maxCap = Math.max(7, ...TEAM.map(t=>Math.round(t.capaciteJour||7)));
+  const all = FIXED_HOURS.slice(0, Math.min(maxCap, FIXED_HOURS.length));
+  return {am: all.filter(h=>h<12), pm: all.filter(h=>h>=13)};
+}
+// Regroupe les heures consécutives occupées par la même tâche en un seul segment
+// (largeur proportionnelle au nombre d'heures) plutôt qu'un petit bloc par heure.
+function buildHourRunsFlex(hrs, taskAtHourFn){
+  const runs = [];
+  hrs.forEach(h=>{
+    const info = taskAtHourFn(h);
+    const key = info ? `${info.l.id}-${info.type}` : 'idle';
+    const last = runs[runs.length-1];
+    if(last && last.key===key){ last.count++; } else runs.push({key, info, count:1});
+  });
+  return runs;
+}
+function runSegHtml(run){
+  if(!run.info) return `<div class="hr-seg hr-idle" style="flex:${run.count};"></div>`;
+  const {l,type} = run.info;
+  const cls = 'status-'+statusCache(l) + (type==='L' ? ' relecture' : '');
+  const actor = type==='R' ? l.realisateur : l.relecteur;
+  const label = currentView==='etude' ? firstName(actor) : escapeHtml(l.nom);
+  const showLabel = run.count>=2;
+  return `<div class="hr-seg ${cls}" style="flex:${run.count};" onclick="pinFromCalendar(${l.id})" onmouseenter="showTooltipFor(event,${l.id})" onmousemove="positionTooltip(event)" onmouseleave="hideTooltipMaybe()" title="${escapeHtml(l.nom)} — ${escapeHtml(actor)} (${type==='R'?'Réalisation':'Relecture'})">${showLabel?label:''}</div>`;
+}
+// Rend une cellule jour divisée en deux moitiés (matin 9h-12h / après-midi 13h-...) :
+// chaque moitié n'est remplie qu'à hauteur du temps réellement occupé ce jour-là, et les
+// heures consécutives d'une même tâche forment un seul histogramme continu avec un seul texte.
+function halfCellHtml(taskAtHourFn){
+  const {am, pm} = halfHours();
+  const row = hrs => `<div class="hr-row">${buildHourRunsFlex(hrs, taskAtHourFn).map(runSegHtml).join('')}</div>`;
+  return `<div class="cal-daysplit">${row(am)}${row(pm)}</div>`;
+}
+
+// ---- Vue semaine : colonnes = jours (Lun-Ven). Chaque cellule est divisée matin/après-midi ;
+// une tâche qui ne dure qu'une demi-journée ne remplit que la moitié correspondante de la case. ----
+function renderWeekGrid(days){
+  _statusCacheSched = computeSchedule();
+  const tasks = computeScheduleRaw();
+  const TODAY = todayMidnight();
+  const cc = document.getElementById('calendar-container');
+
+  const headerHtml = `<tr><th class="cal-rowlabel-h">${currentView==='consultant'?'Consultant':'Livrable'}</th>${days.map(day=>{
+    const isToday = sameDay(day,TODAY);
+    return `<th class="${isToday?'cal-today-col':''}">${wdShort[day.getDay()]} ${String(day.getDate()).padStart(2,'0')}/${String(day.getMonth()+1).padStart(2,'0')}</th>`;
+  }).join('')}</tr>`;
+
+  function taskAtHourForResource(resource, day, h){
+    const t = tasks.find(t=> t.resource===resource && t.segments.some(sg=> sg.hours.some(hh=> sameDay(hh,day) && hh.getHours()===h)));
+    if(!t) return null;
+    const l = LIVRABLES.find(v=>v.id===t.lid);
+    return l ? {l, type:t.type} : null;
+  }
+  function taskAtHourForLivrable(rt, lt, day, h){
+    if(rt && rt.segments.some(sg=> sg.hours.some(hh=> sameDay(hh,day) && hh.getHours()===h))) return {l:LIVRABLES.find(v=>v.id===rt.lid), type:'R'};
+    if(lt && lt.segments.some(sg=> sg.hours.some(hh=> sameDay(hh,day) && hh.getHours()===h))) return {l:LIVRABLES.find(v=>v.id===lt.lid), type:'L'};
+    return null;
+  }
+
+  let rowsHtml = '';
+  if(currentView==='consultant'){
+    TEAM.forEach(person=>{
+      rowsHtml += `<tr><td class="cal-rowlabel">${escapeHtml(person.nom)}</td>`;
+      days.forEach(day=>{
+        const isWknd = isWeekend(day), isToday = sameDay(day,TODAY);
+        let cellClass = (isWknd?' cal-weekend-cell':'')+(isToday?' cal-today-col':'');
+        const inner = isWknd ? `<span class="cal-idle">week-end</span>` : halfCellHtml(h=>taskAtHourForResource(person.nom, day, h));
+        rowsHtml += `<td class="${cellClass}">${inner}</td>`;
+      });
+      rowsHtml += `</tr>`;
+    });
+  } else {
+    const names=[...new Set(LIVRABLES.map(l=>l.etude))];
+    names.forEach(etude=>{
+      const items = LIVRABLES.filter(l=>l.etude===etude);
+      items.forEach((l,idx)=>{
+        const rowLabel = idx===0 ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--steel);text-transform:uppercase;margin-bottom:2px;">${escapeHtml(etude)}</div>${escapeHtml(l.nom)}` : escapeHtml(l.nom);
+        rowsHtml += `<tr><td class="cal-rowlabel">${rowLabel}</td>`;
+        const rt = tasks.find(t=>t.lid===l.id && t.type==='R');
+        const lt = tasks.find(t=>t.lid===l.id && t.type==='L');
+        days.forEach(day=>{
+          const isWknd = isWeekend(day), isToday = sameDay(day,TODAY);
+          let cellClass = (isWknd?' cal-weekend-cell':'')+(isToday?' cal-today-col':'');
+          const inner = isWknd ? `<span class="cal-idle">week-end</span>` : halfCellHtml(h=>taskAtHourForLivrable(rt, lt, day, h));
+          rowsHtml += `<td class="${cellClass}">${inner}</td>`;
+        });
+        rowsHtml += `</tr>`;
+      });
+    });
+  }
+  cc.innerHTML = `<div class="table-scroll"><table class="cal-table">${headerHtml}${rowsHtml}</table></div>`;
+}
+
+// ---- Vue jour : colonnes = heures (9h-12h, 13h-...), résolution horaire réelle ----
+function renderDayHourGrid(day){
+  _statusCacheSched = computeSchedule();
+  const tasks = computeScheduleRaw();
+  const maxCap = Math.max(7, ...TEAM.map(t=>Math.round(t.capaciteJour||7)));
+  const hours = FIXED_HOURS.slice(0, Math.min(maxCap, FIXED_HOURS.length));
+  const cc = document.getElementById('calendar-container');
+  const isWknd = isWeekend(day);
+
+  function taskAtHour(resource, hour){
+    return tasks.find(t=> t.resource===resource && t.segments.some(sg=> sg.hours.some(h=> sameDay(h,day) && h.getHours()===hour)));
+  }
+  // Regroupe les heures consécutives occupées par la même tâche en une seule "plage" :
+  // la pause déjeuner (transition vers 13h) marque toujours une coupure visuelle.
+  function buildHourRuns(getInfoFn){
+    const runs = [];
+    hours.forEach(h=>{
+      const info = getInfoFn(h); // {l, type} | 'noshift' | null (libre)
+      const key = info==='noshift' ? 'noshift' : (info ? `${info.l.id}-${info.type}` : 'idle');
+      const last = runs[runs.length-1];
+      const forceBreak = h===13;
+      if(last && last.key===key && !forceBreak){ last.count++; }
+      else runs.push({key, info, count:1, firstHour:h});
+    });
+    return runs;
+  }
+  function runCellHtml(run){
+    const hasLunchSep = run.firstHour===13;
+    const sepClass = hasLunchSep ? ' cal-lunch-sep' : '';
+    if(run.info==='noshift') return `<td colspan="${run.count}" class="${sepClass.trim()}"><span class="cal-idle cal-noshift">—</span></td>`;
+    if(!run.info) return `<td colspan="${run.count}" class="${sepClass.trim()}"><span class="cal-idle">libre</span></td>`;
+    const {l, type} = run.info;
+    const cls = 'status-'+statusCache(l) + (type==='L' ? ' relecture' : '');
+    const actor = type==='R' ? l.realisateur : l.relecteur;
+    const label = currentView==='etude'
+      ? `${type==='R'?'Réal.':'Rel.'} ${escapeHtml(actor)}`
+      : `${type==='R'?'Réal.':'Rel.'} ${escapeHtml(l.nom)}`;
+    return `<td colspan="${run.count}" class="cal-task-cell ${cls}${sepClass}" onclick="pinFromCalendar(${l.id})" onmouseenter="showTooltipFor(event,${l.id})" onmousemove="positionTooltip(event)" onmouseleave="hideTooltipMaybe()" title="${escapeHtml(l.nom)} — ${escapeHtml(actor)} (${type==='R'?'Réalisation':'Relecture'})">${label}</td>`;
+  }
+
+  const headerHtml = `<tr><th class="cal-rowlabel-h">${currentView==='consultant'?'Consultant':'Livrable'}</th>${hours.map(h=>
+    `<th${h===13?' class="cal-lunch-sep"':''}>${h}h–${h+1}h</th>`
+  ).join('')}</tr>`;
+
+  let rowsHtml = '';
+  if(isWknd){
+    rowsHtml = `<tr><td class="cal-rowlabel muted small" colspan="${hours.length+1}" style="padding:16px 10px;">Week-end — aucune activité planifiée.</td></tr>`;
+  } else if(currentView==='consultant'){
+    TEAM.forEach(person=>{
+      rowsHtml += `<tr><td class="cal-rowlabel">${escapeHtml(person.nom)}</td>`;
+      const runs = buildHourRuns(h=>{
+        if(!personHasSlot(person, h)) return 'noshift';
+        const t = taskAtHour(person.nom, h);
+        if(!t) return null;
+        const l = LIVRABLES.find(x=>x.id===t.lid);
+        return l ? {l, type:t.type} : null;
+      });
+      runs.forEach(run=> rowsHtml += runCellHtml(run));
+      rowsHtml += `</tr>`;
+    });
+  } else {
+    const names=[...new Set(LIVRABLES.map(l=>l.etude))];
+    names.forEach(etude=>{
+      const items = LIVRABLES.filter(l=>l.etude===etude);
+      items.forEach((l,idx)=>{
+        const rowLabel = idx===0 ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--steel);text-transform:uppercase;margin-bottom:2px;">${escapeHtml(etude)}</div>${escapeHtml(l.nom)}` : escapeHtml(l.nom);
+        rowsHtml += `<tr><td class="cal-rowlabel">${rowLabel}</td>`;
+        const rt = tasks.find(t=>t.lid===l.id && t.type==='R');
+        const lt = tasks.find(t=>t.lid===l.id && t.type==='L');
+        const runs = buildHourRuns(h=>{
+          if(rt && rt.segments.some(sg=> sg.hours.some(hh=> sameDay(hh,day) && hh.getHours()===h))) return {l, type:'R'};
+          if(lt && lt.segments.some(sg=> sg.hours.some(hh=> sameDay(hh,day) && hh.getHours()===h))) return {l, type:'L'};
+          return null;
+        });
+        runs.forEach(run=> rowsHtml += runCellHtml(run));
+        rowsHtml += `</tr>`;
+      });
+    });
+  }
+  cc.innerHTML = `<div class="table-scroll"><table class="cal-table">${headerHtml}${rowsHtml}</table></div>`;
+}
+function pinFromCalendar(lid){ pinnedId = lid; }
+function showTooltipFor(e, lid){ const l = LIVRABLES.find(x=>x.id===lid); if(l) showTooltip(e, l, computeSchedule()); }
+function hideTooltipMaybe(){ if(pinnedId===null) hideTooltip(); }
+
+function renderGanttContinuous(){
+  const sched = computeSchedule();
+  const {min,max} = getRange(sched);
+  const pxPerDay = ZOOM_PX[currentZoom];
+  const totalDays = Math.ceil((max-min)/dayMs);
+  const timelineWidth = totalDays*pxPerDay;
+  function xFor(dt){ return (dt-min)/dayMs*pxPerDay; }
+
+  const labelsCol = document.getElementById('labels-col');
+  const rowsContainer = document.getElementById('rows-container');
+  labelsCol.innerHTML = `<div class="labels-header">${currentView==='consultant'?'Consultant':'Étude'}</div>`;
+  rowsContainer.innerHTML = "";
+  rowsContainer.style.width = timelineWidth+"px";
+
+  let groups = [];
+  if(currentView==='consultant'){
+    TEAM.forEach(person=>{
+      const segs=[];
+      let taskCount = 0;
+      LIVRABLES.forEach(l=>{
+        const s = sched[l.id]; if(!s) return;
+        if(l.realisateur===person.nom && s.rSegments && s.rSegments.length){
+          taskCount++;
+          s.rSegments.forEach(sg=> segs.push({start:sg.start, end:new Date(sg.end.getTime()+3600000), type:'realisation', l}));
+        }
+        if(l.relecteur===person.nom && s.lSegments && s.lSegments.length){
+          taskCount++;
+          s.lSegments.forEach(sg=> segs.push({start:sg.start, end:new Date(sg.end.getTime()+3600000), type:'relecture', l}));
+        }
+      });
+      groups.push({label:person.nom, sub:`${taskCount} tâche${taskCount>1?'s':''}`, segs});
+    });
+  } else {
+    const names=[...new Set(LIVRABLES.map(l=>l.etude))];
+    names.forEach(etude=>{
+      const items = LIVRABLES.filter(l=>l.etude===etude);
+      const segs = items.map(l=>{ const s=sched[l.id]; return {start:(s&&s.rStart)?s.rStart:d(l.dc), end:(s&&s.lEnd)?s.lEnd:d(l.plan), type:'full', l, s}; });
+      groups.push({label:etude, sub:`${items.length} livrable${items.length>1?'s':''}`, segs});
+    });
+  }
+
+  groups.forEach(g=>{
+    const nLanes = collide(g.segs);
+    const groupHeight = nLanes*ROW_H;
+    const glabel = document.createElement('div');
+    glabel.className='group-label'; glabel.style.height=groupHeight+"px";
+    glabel.innerHTML = `<span>${g.label}</span><span class="count">${g.sub}</span>`;
+    labelsCol.appendChild(glabel);
+
+    const grow = document.createElement('div');
+    grow.className='group-row'; grow.style.height=groupHeight+"px";
+
+    if(currentZoom==='mois'){
+      let cur = new Date(min.getFullYear(), min.getMonth(), 1);
+      while(cur<=max){ const gl=document.createElement('div'); gl.className='gridline'; gl.style.left=xFor(cur)+"px"; grow.appendChild(gl); cur=new Date(cur.getFullYear(),cur.getMonth()+1,1); }
+    } else {
+      let cur = new Date(min.getTime());
+      while(cur<=max){
+        if(cur.getDay()===0||cur.getDay()===6){
+          const wc=document.createElement('div'); wc.className='weekend-col'; wc.style.left=xFor(cur)+"px"; wc.style.width=pxPerDay+"px"; grow.appendChild(wc);
+        }
+        if(cur.getDay()===1){ const gl=document.createElement('div'); gl.className='gridline'; gl.style.left=xFor(cur)+"px"; grow.appendChild(gl); }
+        cur = new Date(cur.getTime()+dayMs);
+      }
+    }
+    const TODAY = todayMidnight();
+    if(TODAY>=min && TODAY<=max){ const tl=document.createElement('div'); tl.className='today-line'; tl.style.left=xFor(TODAY)+"px"; grow.appendChild(tl); }
+
+    g.segs.forEach(seg=>{
+      const x1=xFor(seg.start), x2=xFor(seg.end);
+      const w=Math.max(x2-x1,4);
+      const top = seg.lane*ROW_H + (ROW_H-BAR_H)/2;
+      const bar = document.createElement('div');
+      bar.className='bar'; bar.style.left=x1+"px"; bar.style.width=w+"px"; bar.style.top=top+"px"; bar.style.height=BAR_H+"px";
+
+      if(seg.type==='full'){
+        const l=seg.l, s=seg.s;
+        const st = computeStatus(l, sched);
+        bar.classList.add('status-'+st.key);
+        if(s && s.rEnd){
+          const handoffX = xFor(s.rEnd)-x1;
+          const stripe=document.createElement('div'); stripe.className='seg'; stripe.style.left=Math.max(0,handoffX)+"px"; stripe.style.right="0"; bar.appendChild(stripe);
+        }
+        const lbl=document.createElement('div'); lbl.className='bar-label';
+        lbl.textContent = `${firstName(l.realisateur)} → ${firstName(l.relecteur)} · ${l.nom}`;
+        bar.appendChild(lbl);
+        if(!l.delivery){
+          const planX = xFor(d(l.plan));
+          if(planX>=0 && planX<=timelineWidth){ const tick=document.createElement('div'); tick.className='target-tick'; tick.style.left=planX+"px"; tick.style.top=top+"px"; tick.style.height=BAR_H+"px"; grow.appendChild(tick); }
+        }
+        if(l.delivery){
+          const dx=xFor(d(l.delivery));
+          const dm=document.createElement('div'); dm.className='diamond'; dm.style.left=dx+"px"; dm.style.top=(top+BAR_H/2)+"px"; grow.appendChild(dm);
+        }
+      } else {
+        const l=seg.l;
+        const st = computeStatus(l, sched);
+        bar.classList.add(seg.type);
+        bar.style.opacity = (st.key==='risque') ? '0.9' : '1';
+        if(st.key==='risque' || st.key==='retard'){ bar.style.boxShadow = 'inset 0 0 0 1.5px '+(st.key==='retard'?'var(--coral)':'var(--amber)'); }
+        const lbl=document.createElement('div'); lbl.className='bar-label';
+        lbl.textContent=(seg.type==='realisation'?'Réal. ':'Rel. ')+l.nom; bar.appendChild(lbl);
+      }
+
+      bar.addEventListener('mouseenter', e=>showTooltip(e, seg.l, sched));
+      bar.addEventListener('mousemove', positionTooltip);
+      bar.addEventListener('mouseleave', ()=>{ if(pinnedId===null) hideTooltip(); });
+      bar.addEventListener('click', e=>{ e.stopPropagation(); pinnedId=seg.l.id; showTooltip(e, seg.l, sched); });
+      grow.appendChild(bar);
+    });
+
+    rowsContainer.appendChild(grow);
+  });
+
+  buildRuler(min,max,pxPerDay,timelineWidth);
+  document.getElementById('timeline-inner').style.width=timelineWidth+"px";
+}
+
+function buildRuler(min,max,pxPerDay,timelineWidth){
+  const ruler=document.getElementById('ruler');
+  ruler.style.width=timelineWidth+"px"; ruler.innerHTML="";
+  function xFor(dt){ return (dt-min)/dayMs*pxPerDay; }
+  if(currentZoom==='mois'){
+    let cur=new Date(min.getFullYear(),min.getMonth(),1);
+    while(cur<=max){
+      const tick=document.createElement('div'); tick.className='ruler-tick'; tick.style.left=xFor(cur)+"px";
+      tick.innerHTML=`<span>${monthNames[cur.getMonth()]} ${cur.getFullYear()}</span>`;
+      ruler.appendChild(tick);
+      cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
+    }
+  } else if(currentZoom==='semaine'){
+    let cur=new Date(min.getTime());
+    while(cur.getDay()!==1) cur=new Date(cur.getTime()+dayMs);
+    while(cur<=max){
+      const tick=document.createElement('div'); tick.className='ruler-tick'; tick.style.left=xFor(cur)+"px";
+      tick.innerHTML=`<span>Sem. ${String(cur.getDate()).padStart(2,'0')}/${String(cur.getMonth()+1).padStart(2,'0')}</span>`;
+      ruler.appendChild(tick);
+      cur=new Date(cur.getTime()+7*dayMs);
+    }
+  } else {
+    let cur=new Date(min.getTime());
+    while(cur<=max){
+      const tick=document.createElement('div'); tick.className='ruler-tick'; tick.style.left=xFor(cur)+"px";
+      tick.innerHTML=`<span>${cur.getDate()}</span><span class="wd">${wdLetters[cur.getDay()]}</span>`;
+      ruler.appendChild(tick);
+      cur=new Date(cur.getTime()+dayMs);
+    }
+  }
+}
+
+document.addEventListener('click', ()=>{ pinnedId=null; hideTooltip(); });
+
+function fmtDate(dt){ return dt ? dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
+function fmtEuro(n){ return Math.round(n||0).toLocaleString('fr-FR')+" €"; }
+
+function showTooltip(e,l,sched){
+  const tip=document.getElementById('tooltip');
+  const st=computeStatus(l,sched);
+  const s=sched[l.id];
+  const hR=hoursFor(l.id,"Réalisation"), hL=hoursFor(l.id,"Relecture");
+  const taux=nom=>{const t=TEAM.find(t=>t.nom===nom);return t?t.taux:0;};
+  const cout = hR*taux(l.realisateur)+hL*taux(l.relecteur);
+  const pf = prixFinal(l);
+  const pct = pf ? Math.round(cout/pf*100) : 0;
+  const pillClass = st.key==='livre'?'status-livre':(st.key==='oncours'?'status-oncours':(st.key==='risque'?'status-risque':'status-retard'));
+  let warn = '';
+  if(st.key==='risque') warn = `<div class="warn">Fin de relecture projetée ${fmtDate(s.lEnd)}, après la Plan Delivery Date.</div>`;
+  const prixRow = (l.surfacturations||[]).length
+    ? `<div class="row"><span>Prix initial</span><span>${fmtEuro(l.prix)}</span></div><div class="row"><span>Prix final</span><span>${fmtEuro(pf)}</span></div>`
+    : `<div class="row"><span>Prix</span><span>${fmtEuro(pf)}</span></div>`;
+  tip.innerHTML = `
+    <b>${l.nom}</b>
+    <div class="row"><span>Étude</span><span>${l.etude}</span></div>
+    <div class="row"><span>Type</span><span>${l.type} · ${l.cpx}</span></div>
+    <div class="row"><span>Réalisateur</span><span>${l.realisateur}</span></div>
+    <div class="row"><span>Relecteur</span><span>${l.relecteur}</span></div>
+    <div class="row"><span>Réalisation (proj.)</span><span>${s?fmtDate(s.rStart)+' → '+fmtDate(s.rEnd):'—'}</span></div>
+    <div class="row"><span>Relecture (proj.)</span><span>${s?fmtDate(s.lStart)+' → '+fmtDate(s.lEnd):'—'}</span></div>
+    <div class="row"><span>Plan Delivery Date</span><span>${fmtDate(d(l.plan))}</span></div>
+    <div class="row"><span>Livraison réelle</span><span>${l.delivery?fmtDate(d(l.delivery)):'—'}</span></div>
+    ${prixRow}
+    <div class="row"><span>Avancement budget</span><span>${pct}%</span></div>
+    ${warn}
+    <span class="pill ${pillClass}">${st.label}</span>
+  `;
+  tip.style.display='block'; positionTooltip(e);
+}
+function positionTooltip(e){
+  const tip=document.getElementById('tooltip');
+  let x=e.clientX+16, y=e.clientY+12;
+  if(x+280>window.innerWidth) x=e.clientX-290;
+  tip.style.left=x+"px"; tip.style.top=y+"px";
+}
+function hideTooltip(){ document.getElementById('tooltip').style.display='none'; }
+
+// ---------------- KPIs ----------------
+function renderKPIs(){
+  const sched = computeSchedule();
+  const statuses = LIVRABLES.map(l=>computeStatus(l,sched).key);
+  const total = LIVRABLES.length;
+  const risk = statuses.filter(s=>s==='risque').length;
+  const late = statuses.filter(s=>s==='retard').length;
+  const done = statuses.filter(s=>s==='livre').length;
+  const oncours = statuses.filter(s=>s==='oncours').length;
+  const cards = [
+    {n:total, l:'Livrables total', cls:''},
+    {n:oncours, l:'En cours (dans les temps)', cls:''},
+    {n:risk, l:'À risque', cls:'risk'},
+    {n:late, l:'En retard', cls:'late'},
+    {n:done, l:'Livrés', cls:'done'},
+  ];
+  document.getElementById('kpis').innerHTML = cards.map(c=>`<div class="kpi-card ${c.cls}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('');
+}
+
+// ---------------- conflicts & reassignment ----------------
+function renderConflicts(){
+  const el = document.getElementById('conflicts');
+  const sched = computeSchedule();
+  const conflicted = LIVRABLES.filter(l=> !l.delivery && ['risque','retard'].includes(computeStatus(l,sched).key));
+  if(!conflicted.length){ el.innerHTML=''; el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML = `<div class="conflicts-title">⚠ ${conflicted.length} conflit${conflicted.length>1?'s':''} de planning détecté${conflicted.length>1?'s':''} — un livrable ne tiendra pas sa Plan Delivery Date</div>` +
+    conflicted.map(l=>{
+      const st = computeStatus(l, sched);
+      const s = sched[l.id];
+      const delta = (s && s.lEnd) ? Math.round((s.lEnd - d(l.plan))/dayMs) : null;
+      const anticipeActive = l.relectureAnticipee!=null && l.relectureAnticipee!=='' && Number(l.relectureAnticipee)<100;
+      return `<div class="conflict-card">
+        <div class="conflict-head"><span class="badge status-${st.key}">${st.label}</span><b>${escapeHtml(l.nom)}</b><span class="muted"> — ${escapeHtml(l.etude)}</span>${anticipeActive?`<span class="badge status-oncours">Relecture anticipée à ${l.relectureAnticipee}%</span>`:''}</div>
+        <div class="conflict-detail">${(s && s.lEnd) ? `Fin de relecture projetée : ${fmtDate(s.lEnd)} — Plan Delivery Date : ${fmtDate(d(l.plan))}${delta>0?` (${delta} j de retard)`:''}` : `Plan Delivery Date dépassée : ${fmtDate(d(l.plan))}`}</div>
+        <div class="conflict-actions">
+          <button class="conflict-btn" onclick="toggleShiftPanel(${l.id})">Choisir une nouvelle Plan Delivery Date…</button>
+          <button class="conflict-btn secondary" onclick="toggleReassignPanel(${l.id})">Réattribuer une tâche…</button>
+          <button class="conflict-btn secondary" onclick="toggleAnticipePanel(${l.id})">Démarrer la relecture en avance…</button>
+        </div>
+        <div class="reassign-panel" id="shift-${l.id}" style="display:none;"></div>
+        <div class="reassign-panel" id="reassign-${l.id}" style="display:none;"></div>
+        <div class="reassign-panel" id="anticipe-${l.id}" style="display:none;"></div>
+      </div>`;
+    }).join('');
+}
+// Date suggérée : date de fin de relecture projetée par le moteur de planification,
+// qui tient déjà compte de la charge réelle des deux personnes assignées (réalisateur
+// et relecteur) sur l'ensemble de leurs autres livrables en cours. Reste modifiable.
+function buildShiftPanel(l){
+  const sched = computeSchedule();
+  const s = sched[l.id];
+  const suggestion = (s && s.lEnd) ? iso(s.lEnd) : l.plan;
+  const current = l.plan;
+  return `<div class="reassign-inner">
+    <div class="reassign-role-head">Nouvelle Plan Delivery Date pour « ${escapeHtml(l.nom)} »</div>
+    <div class="muted small" style="margin:4px 0 8px;">Suggestion calculée d'après la charge actuelle de ${escapeHtml(l.realisateur)} (réalisateur) et ${escapeHtml(l.relecteur)} (relecteur), compte tenu de leurs autres livrables en cours : <b>${fmtDate(d(suggestion))}</b>.</div>
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap;">
+      <input type="date" id="shift-input-${l.id}" value="${suggestion}" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-family:'IBM Plex Mono',monospace;">
+      <button class="candidate-btn" onclick="applyShift(${l.id})">Appliquer cette date</button>
+      <button class="candidate-btn" style="background:var(--steel);" onclick="applyShiftSuggested(${l.id},'${suggestion}')">Utiliser la suggestion (${fmtDate(d(suggestion))})</button>
+    </div>
+    <div class="muted small">Date actuelle : ${fmtDate(d(current))}.</div>
+  </div>`;
+}
+function toggleShiftPanel(id){
+  const panel = document.getElementById('shift-'+id);
+  if(!panel) return;
+  const opening = panel.style.display==='none' || !panel.style.display;
+  document.querySelectorAll('.reassign-panel').forEach(p=>p.style.display='none');
+  if(opening){
+    const l = LIVRABLES.find(x=>x.id===id);
+    if(l){ panel.innerHTML = buildShiftPanel(l); panel.style.display='block'; }
+  }
+}
+function applyShift(id){
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  const input = document.getElementById('shift-input-'+id);
+  if(!input || !input.value) return;
+  l.plan = input.value;
+  saveAndRenderAll();
+}
+function applyShiftSuggested(id, suggestion){
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  l.plan = suggestion;
+  saveAndRenderAll();
+}
+function taskReassignable(l, code){
+  const tache = code==='R' ? 'Réalisation' : 'Relecture';
+  return hoursFor(l.id, tache) <= 0;
+}
+function buildReassignPanel(l){
+  const today = businessDayOrAfter(todayMidnight());
+  const planD = d(l.plan);
+  const periodEnd = planD>today ? planD : new Date(today.getTime()+14*dayMs);
+  let html = `<div class="reassign-inner">`;
+  [['R','Réalisation',l.realisateur,l.relecteur],['L','Relecture',l.relecteur,l.realisateur]].forEach(([code,label,current,other])=>{
+    html += `<div class="reassign-role"><div class="reassign-role-head">${label} <span class="muted">(actuellement ${escapeHtml(current)})</span></div>`;
+    if(!taskReassignable(l,code)){
+      html += `<div class="muted small">Déjà commencée — réattribution non recommandée.</div>`;
+    } else {
+      const candidates = TEAM.filter(t=> t.nom!==current && t.nom!==other)
+        .map(t=>({nom:t.nom, occ:occupancyRate(t.nom, today, periodEnd)}))
+        .sort((a,b)=>a.occ-b.occ);
+      if(!candidates.length){
+        html += `<div class="muted small">Aucun autre consultant disponible.</div>`;
+      } else {
+        html += candidates.map(c=> `<button class="candidate-btn" onclick="reassignTask(${l.id},'${code}',this.dataset.nom)" data-nom="${escapeHtml(c.nom)}">${escapeHtml(c.nom)} — ${Math.round(c.occ*100)}% occupé</button>`).join('');
+      }
+    }
+    html += `</div>`;
+  });
+  html += `<div class="muted small">Taux d'occupation calculé du ${fmtDate(today)} au ${fmtDate(periodEnd)}.</div></div>`;
+  return html;
+}
+function toggleReassignPanel(id){
+  const panel = document.getElementById('reassign-'+id);
+  if(!panel) return;
+  const opening = panel.style.display==='none' || !panel.style.display;
+  document.querySelectorAll('.reassign-panel').forEach(p=>p.style.display='none');
+  if(opening){
+    const l = LIVRABLES.find(x=>x.id===id);
+    if(l){ panel.innerHTML = buildReassignPanel(l); panel.style.display='block'; }
+  }
+}
+function reassignTask(id, code, newPerson){
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  if(code==='R') l.realisateur = newPerson; else l.relecteur = newPerson;
+  saveAndRenderAll();
+}
+
+function buildAnticipePanel(l){
+  const hR = hoursFor(l.id,"Réalisation");
+  const estR = estHoursReal(l);
+  const progressPct = estR>0 ? Math.round(hR/estR*100) : 0;
+  const current = (l.relectureAnticipee!=null && l.relectureAnticipee!=='') ? Number(l.relectureAnticipee) : 100;
+  const suggestion = Math.max(10, Math.min(90, Math.ceil((progressPct||30)/10)*10));
+  const startVal = current<100 ? current : suggestion;
+  return `<div class="reassign-inner">
+    <div class="reassign-role-head">Démarrer la relecture dès que la réalisation atteint :</div>
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap;">
+      <input type="number" min="1" max="100" id="anticipe-input-${l.id}" value="${startVal}" style="width:64px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-family:'IBM Plex Mono',monospace;">
+      <span class="muted small">% des heures de réalisation estimées (actuellement ${hR.toFixed(1)}h / ${estR.toFixed(1)}h pointées, soit ${progressPct}%)</span>
+    </div>
+    <button class="candidate-btn" onclick="applyAnticipe(${l.id})">Appliquer</button>
+    ${current<100 ? `<button class="candidate-btn" style="background:var(--steel);" onclick="applyAnticipe(${l.id},true)">Revenir au comportement normal (100%)</button>` : ''}
+    <div class="muted small" style="margin-top:6px;">La relecture pourra démarrer dès ce seuil atteint, même si la réalisation n'est pas terminée — les deux tâches avancent alors en parallèle chez deux consultants différents.</div>
+  </div>`;
+}
+function toggleAnticipePanel(id){
+  const panel = document.getElementById('anticipe-'+id);
+  if(!panel) return;
+  const opening = panel.style.display==='none' || !panel.style.display;
+  document.querySelectorAll('.reassign-panel').forEach(p=>p.style.display='none');
+  if(opening){
+    const l = LIVRABLES.find(x=>x.id===id);
+    if(l){ panel.innerHTML = buildAnticipePanel(l); panel.style.display='block'; }
+  }
+}
+function applyAnticipe(id, reset){
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  if(reset){ l.relectureAnticipee = null; saveAndRenderAll(); return; }
+  const input = document.getElementById('anticipe-input-'+id);
+  const val = Math.max(1, Math.min(100, Number(input && input.value)||50));
+  l.relectureAnticipee = val;
+  saveAndRenderAll();
+}
+
+// ---------------- management tables ----------------
+function nextId(arr){ return arr.length ? Math.max(...arr.map(x=>x.id))+1 : 1; }
+
+function teamOptions(selected){
+  return TEAM.map(t=>`<option value="${t.nom}" ${t.nom===selected?'selected':''}>${t.nom}</option>`).join('');
+}
+function typeOptions(selected){
+  const types=[...new Set(REFERENTIEL.map(r=>r.type))];
+  return types.map(t=>`<option value="${t}" ${t===selected?'selected':''}>${t}</option>`).join('');
+}
+function cpxOptions(selected){
+  return ["Basse","Moyenne","Haute"].map(c=>`<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');
+}
+function tacheOptions(selected){
+  return ["Réalisation","Relecture"].map(t=>`<option value="${t}" ${t===selected?'selected':''}>${t}</option>`).join('');
+}
+function livOptions(selected){
+  return LIVRABLES.map(l=>`<option value="${l.id}" ${l.id==selected?'selected':''}>#${l.id} ${l.nom}</option>`).join('');
+}
+
+let livFilter = {text:'', consultant:'', statut:''};
+let livSort = {field:'priority', dir:'asc'};
+
+function passesLivFilter(l, sched){
+  const f = livFilter;
+  if(f.text){ const hay=(l.etude+' '+l.nom).toLowerCase(); if(!hay.includes(f.text.toLowerCase())) return false; }
+  if(f.consultant && l.realisateur!==f.consultant && l.relecteur!==f.consultant) return false;
+  if(f.statut && computeStatus(l,sched).key!==f.statut) return false;
+  return true;
+}
+function sortLivrables(arr, sched){
+  const {field,dir} = livSort; const mul = dir==='asc'?1:-1;
+  return [...arr].sort((a,b)=>{
+    let va,vb;
+    if(field==='priority'){ va=a.priority||a.id; vb=b.priority||b.id; }
+    else if(field==='statut'){ va=computeStatus(a,sched).label; vb=computeStatus(b,sched).label; }
+    else { va=a[field]||''; vb=b[field]||''; }
+    if(va<vb) return -1*mul; if(va>vb) return 1*mul; return 0;
+  });
+}
+function setLivSort(field){
+  if(livSort.field===field) livSort.dir = livSort.dir==='asc'?'desc':'asc';
+  else { livSort.field=field; livSort.dir='asc'; }
+  renderLivrablesTable();
+}
+function populateLivFilterOptions(){
+  const sel = document.getElementById('liv-filter-consultant'); if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">Tous les consultants</option>` + TEAM.map(t=>`<option value="${t.nom}" ${t.nom===cur?'selected':''}>${t.nom}</option>`).join('');
+}
+
+function renderLivrablesTable(){
+  const t=document.getElementById('tbl-livrables');
+  const sched = computeSchedule();
+  populateLivFilterOptions();
+  let list = LIVRABLES.filter(l=>passesLivFilter(l,sched));
+  list = sortLivrables(list, sched);
+  const arrow = f=> livSort.field===f ? (livSort.dir==='asc'?' ▲':' ▼') : '';
+  let html = `<tr>
+    <th class="sortable" onclick="setLivSort('priority')">Prio.${arrow('priority')}</th>
+    <th class="sortable" onclick="setLivSort('etude')">Étude${arrow('etude')}</th>
+    <th class="sortable" onclick="setLivSort('departement')">Département${arrow('departement')}</th>
+    <th class="sortable" onclick="setLivSort('interlocuteur')">Interlocuteur${arrow('interlocuteur')}</th>
+    <th class="sortable" onclick="setLivSort('nom')">Livrable${arrow('nom')}</th>
+    <th>Type</th><th>Cpx</th>
+    <th class="sortable" onclick="setLivSort('prix')">Prix initial${arrow('prix')}</th>
+    <th>Surfacturation(s)</th>
+    <th>Prix final</th>
+    <th class="sortable" onclick="setLivSort('realisateur')">Réalisateur${arrow('realisateur')}</th>
+    <th class="sortable" onclick="setLivSort('relecteur')">Relecteur${arrow('relecteur')}</th>
+    <th class="sortable" onclick="setLivSort('dc')">Complétion${arrow('dc')}</th>
+    <th class="sortable" onclick="setLivSort('plan')">Plan Delivery Date${arrow('plan')}</th>
+    <th class="sortable" onclick="setLivSort('delivery')">Livraison${arrow('delivery')}</th>
+    <th class="sortable" onclick="setLivSort('duree')">Durée est. (h)${arrow('duree')}</th>
+    <th>Réal./Relect.</th>
+    <th>Heures consommées</th>
+    <th>Commentaire</th>
+    <th class="sortable" onclick="setLivSort('bonCommande')">Bon de commande${arrow('bonCommande')}</th>
+    <th>Erreur Aixial</th>
+    <th class="sortable" onclick="setLivSort('statut')">Statut${arrow('statut')}</th>
+    <th></th></tr>`;
+  if(!list.length){
+    html += `<tr><td colspan="22" class="muted small" style="padding:14px 6px;">Aucun livrable ne correspond aux filtres.</td></tr>`;
+  }
+  list.forEach(l=>{
+    const st = computeStatus(l, sched);
+    const prioCell = livSort.field==='priority'
+      ? `${l.priority||l.id} <button class="icon-btn up" onclick="movePriority(${l.id},-1)" title="Monter">↑</button><button class="icon-btn down" onclick="movePriority(${l.id},1)" title="Descendre">↓</button>`
+      : `${l.priority||l.id}`;
+    const {pctReal,pctRelect} = splitFor(l.type);
+    const consommees = hoursFor(l.id,"Réalisation") + hoursFor(l.id,"Relecture");
+    const surfs = Array.isArray(l.surfacturations) ? l.surfacturations : [];
+    const surfTags = surfs.map((sf,i)=>`<span class="surf-tag">${surfLabel(sf.type)}<button onclick="removeSurf(${l.id},${i})" title="Retirer">✕</button></span>`).join('');
+    html += `<tr data-id="${l.id}">
+      <td style="white-space:nowrap;">${prioCell}</td>
+      <td><input value="${escapeHtml(l.etude)}" onchange="updateLivrable(${l.id},'etude',this.value)"></td>
+      <td><input value="${escapeHtml(l.departement||'')}" onchange="updateLivrable(${l.id},'departement',this.value)" placeholder="Département"></td>
+      <td><input value="${escapeHtml(l.interlocuteur||'')}" onchange="updateLivrable(${l.id},'interlocuteur',this.value)" placeholder="Interlocuteur"></td>
+      <td><input value="${escapeHtml(l.nom)}" onchange="updateLivrable(${l.id},'nom',this.value)"></td>
+      <td><select onchange="updateLivrable(${l.id},'type',this.value,true)">${typeOptions(l.type)}</select></td>
+      <td><select onchange="updateLivrable(${l.id},'cpx',this.value,true)">${cpxOptions(l.cpx)}</select></td>
+      <td><input type="number" value="${l.prix}" onchange="updateLivrable(${l.id},'prix',Number(this.value))"></td>
+      <td style="min-width:170px;">
+        <div class="surf-tags">${surfTags}</div>
+        <select onchange="addSurf(${l.id},this.value); this.value='';">
+          <option value="">+ ajouter…</option>
+          <option value="1">Type 1 (+200€)</option>
+          <option value="2">Type 2 (+50%)</option>
+          <option value="3">Type 3 (+75%)</option>
+        </select>
+      </td>
+      <td class="fin-num-pos" style="font-weight:600;white-space:nowrap;">${fmtEuro(prixFinal(l))}</td>
+      <td><select onchange="updateLivrable(${l.id},'realisateur',this.value)">${teamOptions(l.realisateur)}</select></td>
+      <td><select onchange="updateLivrable(${l.id},'relecteur',this.value)">${teamOptions(l.relecteur)}</select></td>
+      <td><input type="date" value="${l.dc}" onchange="updateLivrable(${l.id},'dc',this.value)"></td>
+      <td><input type="date" value="${l.plan}" onchange="updateLivrable(${l.id},'plan',this.value)"></td>
+      <td><input type="date" value="${l.delivery||''}" onchange="updateLivrable(${l.id},'delivery',this.value||null)"></td>
+      <td><input type="number" value="${l.duree}" onchange="updateLivrable(${l.id},'duree',Number(this.value))"></td>
+      <td class="muted small" style="white-space:nowrap;">${estHoursReal(l).toFixed(1)}h / ${estHoursRelect(l).toFixed(1)}h<br>(${pctReal}% / ${pctRelect}%)</td>
+      <td class="muted small" style="white-space:nowrap;">${consommees.toFixed(1)} h</td>
+      <td><input value="${escapeHtml(l.commentaire||'')}" onchange="updateLivrable(${l.id},'commentaire',this.value)" placeholder="Commentaire" style="min-width:160px;"></td>
+      <td><select onchange="updateLivrable(${l.id},'bonCommande',this.value)">
+        <option value="">—</option>
+        ${BONS_COMMANDE.map(bc=>`<option value="${escapeHtml(bc.nom)}" ${bc.nom===l.bonCommande?'selected':''}>${escapeHtml(bc.nom)}</option>`).join('')}
+      </select></td>
+      <td style="text-align:center;"><input type="checkbox" ${l.erreurAixial?'checked':''} onchange="updateLivrable(${l.id},'erreurAixial',this.checked)"></td>
+      <td><span class="badge status-${st.key}">${st.label}</span></td>
+      <td><button class="icon-btn" onclick="deleteLivrable(${l.id})" title="Supprimer">✕</button></td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+function applyRefDefaults(l){
+  const ref = REFERENTIEL.find(r=>r.type===l.type && r.cpx===l.cpx);
+  if(ref){ l.prix = ref.prix; l.duree = ref.duree; }
+}
+function surfLabel(type){
+  return type===1?'Type 1 (+200€)': type===2?'Type 2 (+50%)': type===3?'Type 3 (+75%)':'?';
+}
+function prixFinal(l){
+  const base = Number(l.prix)||0;
+  let extra = 0;
+  (l.surfacturations||[]).forEach(sf=>{
+    if(sf.type===1) extra += 200;
+    else if(sf.type===2) extra += base*0.5;
+    else if(sf.type===3) extra += base*0.75;
+  });
+  return base+extra;
+}
+function addSurf(id, typeStr){
+  if(!typeStr) return;
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  if(!Array.isArray(l.surfacturations)) l.surfacturations=[];
+  l.surfacturations.push({type:Number(typeStr)});
+  saveAndRenderAll();
+}
+function removeSurf(id, idx){
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  if(!Array.isArray(l.surfacturations)) return;
+  l.surfacturations.splice(idx,1);
+  saveAndRenderAll();
+}
+function updateLivrable(id, field, value, refreshDefaults){
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  l[field]=value;
+  if(refreshDefaults) applyRefDefaults(l);
+  saveAndRenderAll();
+}
+function renumberPriorities(){
+  const sorted=[...LIVRABLES].sort((a,b)=>(a.priority||a.id)-(b.priority||b.id));
+  sorted.forEach((l,idx)=>{ l.priority = idx+1; });
+}
+function movePriority(id, dir){
+  const sorted=[...LIVRABLES].sort((a,b)=>(a.priority||a.id)-(b.priority||b.id));
+  const idx = sorted.findIndex(l=>l.id===id);
+  const swapIdx = idx+dir;
+  if(swapIdx<0||swapIdx>=sorted.length) return;
+  const pa = sorted[idx].priority||sorted[idx].id, pb = sorted[swapIdx].priority||sorted[swapIdx].id;
+  sorted[idx].priority = pb; sorted[swapIdx].priority = pa;
+  renumberPriorities();
+  saveAndRenderAll();
+}
+function deleteLivrable(id){
+  LIVRABLES = LIVRABLES.filter(l=>l.id!==id);
+  HEURES = HEURES.filter(h=>h.livrableId!==id);
+  renumberPriorities();
+  saveAndRenderAll();
+}
+document.getElementById('add-livrable').addEventListener('click', ()=>{
+  const id = nextId(LIVRABLES);
+  const defType = REFERENTIEL[0].type, defCpx = REFERENTIEL[0].cpx;
+  const ref = REFERENTIEL.find(r=>r.type===defType && r.cpx===defCpx);
+  LIVRABLES.push({id, etude:"Nouvelle étude", nom:"Nouveau livrable", type:defType, cpx:defCpx, prix:ref?ref.prix:0,
+    realisateur:TEAM[0]?.nom||'', relecteur:TEAM[1]?.nom||TEAM[0]?.nom||'', dc:iso(todayMidnight()), plan:iso(new Date(todayMidnight().getTime()+21*dayMs)),
+    delivery:null, duree:ref?ref.duree:12, priority:nextId(LIVRABLES),
+    interlocuteur:'', departement:'', commentaire:'', surfacturations:[]});
+  renumberPriorities();
+  // un filtre actif pourrait masquer la ligne qu'on vient de créer -> on le réinitialise
+  // pour garantir que la nouvelle ligne soit visible immédiatement.
+  livFilter = {text:'', consultant:'', statut:''};
+  const s1=document.getElementById('liv-search'), s2=document.getElementById('liv-filter-consultant'), s3=document.getElementById('liv-filter-statut');
+  if(s1) s1.value=''; if(s2) s2.value=''; if(s3) s3.value='';
+  saveAndRenderAll();
+});
+
+function renderEquipeTable(){
+  const t=document.getElementById('tbl-equipe');
+  let html = `<tr><th>Nom</th><th>Salaire mensuel brut (€)</th><th>Coût horaire chargé (×${MULTIPLICATEUR_CHARGES})</th><th>Capacité jour (h)</th><th></th></tr>`;
+  TEAM.forEach((p,idx)=>{
+    html += `<tr>
+      <td><input value="${p.nom}" onchange="updateEquipe(${idx},'nom',this.value)"></td>
+      <td><input type="number" value="${p.salaire}" onchange="updateEquipe(${idx},'salaire',Number(this.value))"></td>
+      <td class="muted" style="white-space:nowrap;">${fmtEuro(coutHoraireCharge(p))}/h</td>
+      <td><input type="number" value="${p.capaciteJour}" onchange="updateEquipe(${idx},'capaciteJour',Number(this.value))"></td>
+      <td><button class="icon-btn" onclick="deleteEquipe(${idx})" title="Supprimer">✕</button></td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+function updateEquipe(idx, field, value){
+  const old = TEAM[idx].nom;
+  TEAM[idx][field]=value;
+  if(field==='nom'){
+    LIVRABLES.forEach(l=>{ if(l.realisateur===old) l.realisateur=value; if(l.relecteur===old) l.relecteur=value; });
+    HEURES.forEach(h=>{ if(h.consultant===old) h.consultant=value; });
+  }
+  saveAndRenderAll();
+}
+function deleteEquipe(idx){ TEAM.splice(idx,1); saveAndRenderAll(); }
+document.getElementById('add-equipe').addEventListener('click', ()=>{
+  TEAM.push({nom:"Nouveau consultant", taux:80, capaciteJour:7});
+  saveAndRenderAll();
+});
+
+function renderReferentielTable(){
+  const t=document.getElementById('tbl-referentiel');
+  let html = `<tr><th>Type d'étude</th><th>Complexité</th><th>Prix fixe (€)</th><th>Durée totale par défaut (h)</th><th></th></tr>`;
+  REFERENTIEL.forEach((r,idx)=>{
+    html += `<tr>
+      <td><input value="${r.type}" onchange="updateRef(${idx},'type',this.value)"></td>
+      <td><select onchange="updateRef(${idx},'cpx',this.value)">${cpxOptions(r.cpx)}</select></td>
+      <td><input type="number" value="${r.prix}" onchange="updateRef(${idx},'prix',Number(this.value))"></td>
+      <td><input type="number" value="${r.duree}" onchange="updateRef(${idx},'duree',Number(this.value))"></td>
+      <td><button class="icon-btn" onclick="deleteRef(${idx})" title="Supprimer">✕</button></td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+  renderSplitsTable();
+}
+function updateRef(idx, field, value){ REFERENTIEL[idx][field]=value; saveAndRenderAll(); }
+function deleteRef(idx){ REFERENTIEL.splice(idx,1); saveAndRenderAll(); }
+document.getElementById('add-referentiel').addEventListener('click', ()=>{
+  REFERENTIEL.push({type:"Nouveau type", cpx:"Basse", prix:1000, duree:12});
+  saveAndRenderAll();
+});
+
+function syncSplits(){
+  const types = [...new Set(REFERENTIEL.map(r=>r.type))];
+  types.forEach(type=>{ if(!SPLITS.find(s=>s.type===type)) SPLITS.push({type, pctReal:70}); });
+}
+function renderSplitsTable(){
+  syncSplits();
+  const t = document.getElementById('tbl-splits'); if(!t) return;
+  const types = [...new Set(REFERENTIEL.map(r=>r.type))];
+  let html = `<tr><th>Type d'étude</th><th>% Réalisation</th><th>% Relecture</th></tr>`;
+  types.forEach(type=>{
+    const s = SPLITS.find(x=>x.type===type) || {type, pctReal:70};
+    html += `<tr>
+      <td>${escapeHtml(type)}</td>
+      <td><input type="number" min="0" max="100" value="${s.pctReal}" onchange="updateSplit('${escapeHtml(type).replace(/'/g,"\\'")}',this.value)"></td>
+      <td class="muted">${100-s.pctReal}%</td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+function updateSplit(type, value){
+  let pct = Math.max(0, Math.min(100, Number(value)||0));
+  let s = SPLITS.find(x=>x.type===type);
+  if(!s){ s = {type, pctReal:pct}; SPLITS.push(s); } else { s.pctReal = pct; }
+  saveAndRenderAll();
+}
+
+let heuresFilter = {consultant:'', livrableId:''};
+
+function populateHeuresFilterOptions(){
+  const selC = document.getElementById('heures-filter-consultant');
+  const selL = document.getElementById('heures-filter-livrable');
+  if(selC){ const cur=selC.value; selC.innerHTML = `<option value="">Tous les consultants</option>` + TEAM.map(t=>`<option value="${t.nom}" ${t.nom===cur?'selected':''}>${t.nom}</option>`).join(''); }
+  if(selL){ const cur=selL.value; selL.innerHTML = `<option value="">Tous les livrables</option>` + LIVRABLES.map(l=>`<option value="${l.id}" ${String(l.id)===cur?'selected':''}>#${l.id} ${escapeHtml(l.nom)}</option>`).join(''); }
+}
+
+function renderHeuresTable(){
+  const t=document.getElementById('tbl-heures');
+  populateHeuresFilterOptions();
+  let list = HEURES.filter(h=>
+    (!heuresFilter.consultant || h.consultant===heuresFilter.consultant) &&
+    (!heuresFilter.livrableId || String(h.livrableId)===String(heuresFilter.livrableId))
+  );
+  list = [...list].sort((a,b)=> a.date<b.date?1:-1);
+  let html = `<tr><th>Date</th><th>Consultant</th><th>Livrable</th><th>Tâche</th><th>Heures</th><th></th></tr>`;
+  if(!list.length){
+    html += `<tr><td colspan="6" class="muted small" style="padding:14px 6px;">Aucune saisie ne correspond aux filtres.</td></tr>`;
+  }
+  list.forEach(h=>{
+    html += `<tr>
+      <td><input type="date" value="${h.date}" onchange="updateHeure(${h.id},'date',this.value)"></td>
+      <td><select onchange="updateHeure(${h.id},'consultant',this.value)">${teamOptions(h.consultant)}</select></td>
+      <td><select onchange="updateHeure(${h.id},'livrableId',Number(this.value))">${livOptions(h.livrableId)}</select></td>
+      <td><select onchange="updateHeure(${h.id},'tache',this.value)">${tacheOptions(h.tache)}</select></td>
+      <td><input type="number" value="${h.heures}" onchange="updateHeure(${h.id},'heures',Number(this.value))"></td>
+      <td><button class="icon-btn" onclick="deleteHeure(${h.id})" title="Supprimer">✕</button></td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+function updateHeure(id, field, value){
+  const h = HEURES.find(x=>x.id===id); if(!h) return;
+  h[field]=value; saveAndRenderAll();
+}
+function deleteHeure(id){ HEURES = HEURES.filter(h=>h.id!==id); saveAndRenderAll(); }
+document.getElementById('add-heure').addEventListener('click', ()=>{
+  const id = nextId(HEURES);
+  HEURES.push({id, date:iso(todayMidnight()), consultant:TEAM[0]?.nom||'', livrableId:LIVRABLES[0]?.id||1, tache:"Réalisation", heures:1});
+  // idem : on réinitialise le filtre pour que la ligne ajoutée soit visible immédiatement.
+  heuresFilter = {consultant:'', livrableId:''};
+  const s1=document.getElementById('heures-filter-consultant'), s2=document.getElementById('heures-filter-livrable');
+  if(s1) s1.value=''; if(s2) s2.value='';
+  saveAndRenderAll();
+});
+
+// ---------------- pilotage financier ----------------
+function rateOf(nom){ return coutHoraireCharge(TEAM.find(t=>t.nom===nom)); }
+
+function studyFinancials(){
+  const names = [...new Set(LIVRABLES.map(l=>l.etude))];
+  return names.map(etude=>{
+    const items = LIVRABLES.filter(l=>l.etude===etude);
+    let prixVendu=0, cout=0, heures=0;
+    items.forEach(l=>{
+      prixVendu += prixFinal(l);
+      const hR = hoursFor(l.id,"Réalisation"), hL = hoursFor(l.id,"Relecture");
+      heures += hR+hL;
+      cout += hR*rateOf(l.realisateur) + hL*rateOf(l.relecteur);
+    });
+    const marge = prixVendu-cout;
+    return {etude, nb:items.length, prixVendu, cout, heures, marge, tauxMarge: prixVendu>0?marge/prixVendu:0};
+  });
+}
+function typeFinancials(){
+  const types = [...new Set(LIVRABLES.map(l=>l.type))];
+  return types.map(type=>{
+    const items = LIVRABLES.filter(l=>l.type===type);
+    let prixVendu=0, cout=0, heures=0;
+    items.forEach(l=>{
+      prixVendu += prixFinal(l);
+      const hR = hoursFor(l.id,"Réalisation"), hL = hoursFor(l.id,"Relecture");
+      heures += hR+hL;
+      cout += hR*rateOf(l.realisateur) + hL*rateOf(l.relecteur);
+    });
+    const marge = prixVendu-cout;
+    return {type, nb:items.length, prixVendu, cout, heures, marge, tauxMarge: prixVendu>0?marge/prixVendu:0};
+  });
+}
+function livrableFinancials(){
+  return LIVRABLES.map(l=>{
+    const hR = hoursFor(l.id,"Réalisation"), hL = hoursFor(l.id,"Relecture");
+    const prixVendu = prixFinal(l);
+    const cout = hR*rateOf(l.realisateur) + hL*rateOf(l.relecteur);
+    const marge = prixVendu-cout;
+    return {id:l.id, etude:l.etude, nom:l.nom, prixVendu, cout, heures:hR+hL, marge, tauxMarge: prixVendu>0?marge/prixVendu:0};
+  });
+}
+function consultantFinancials(periodStart, periodEnd){
+  return TEAM.map(person=>{
+    let heures=0, coutOccupe=0, revenue=0;
+    const tauxH = coutHoraireCharge(person);
+    LIVRABLES.forEach(l=>{
+      const {pctReal, pctRelect} = splitFor(l.type);
+      const hR = hoursFor(l.id,"Réalisation"), hL = hoursFor(l.id,"Relecture");
+      const estR = estHoursReal(l), estL = estHoursRelect(l);
+      // le CA attribué suit la répartition fixe du type (ex. 70% réalisation / 30% relecture),
+      // proratisé par l'avancement réel de la phase (plafonné à 100%) plutôt que par un
+      // partage proportionnel aux heures effectivement pointées entre les deux personnes.
+      if(l.realisateur===person.nom && hR>0){
+        heures += hR; coutOccupe += hR*tauxH;
+        const avancement = estR>0 ? Math.min(hR/estR,1) : 1;
+        revenue += avancement * (pctReal/100) * (prixFinal(l));
+      }
+      if(l.relecteur===person.nom && hL>0){
+        heures += hL; coutOccupe += hL*tauxH;
+        const avancement = estL>0 ? Math.min(hL/estL,1) : 1;
+        revenue += avancement * (pctRelect/100) * (prixFinal(l));
+      }
+    });
+    const margeOccupee = revenue-coutOccupe;
+    const capaciteTheorique = (periodStart && periodEnd) ? (Number(person.capaciteJour)||7) * businessDaysBetween(periodStart, periodEnd) : 0;
+    const coutGlobal = tauxH * capaciteTheorique;
+    const margeGlobale = revenue - coutGlobal;
+    return {nom:person.nom, tauxH, heures, coutOccupe, revenue, margeOccupee,
+      tauxMargeOccupee: revenue>0?margeOccupee/revenue:0, tauxValorise: heures>0?revenue/heures:0,
+      capaciteTheorique, coutGlobal, margeGlobale, tauxMargeGlobale: revenue>0?margeGlobale/revenue:0};
+  });
+}
+
+let finPeriod = null;
+function initFinPeriod(){
+  if(finPeriod) return;
+  const start = todayMidnight();
+  finPeriod = {start: iso(start), end: iso(new Date(start.getTime()+30*dayMs))};
+}
+function margeSpan(marge, pctLabel){
+  const cls = marge>=0?'pos':'neg';
+  const pct = Math.min(Math.abs(marge)*0,100); // placeholder unused
+  return `<span class="fin-num-${cls}">${fmtEuro(marge)}</span>`;
+}
+function tauxMargeBar(taux){
+  const cls = taux>=0?'pos':'neg';
+  const w = Math.min(Math.abs(taux)*100,100);
+  return `<div class="marge-bar-wrap"><div class="marge-bar ${cls}" style="width:${w}%"></div></div><span class="fin-num-${cls}">${Math.round(taux*100)}%</span>`;
+}
+
+let etudeFinSort = {field:'marge', dir:'desc'};
+function renderEtudeFinTable(){
+  const t = document.getElementById('tbl-etude-renta');
+  let list = studyFinancials();
+  const {field,dir} = etudeFinSort; const mul = dir==='asc'?1:-1;
+  list.sort((a,b)=>{ const va=a[field], vb=b[field]; if(va<vb) return -1*mul; if(va>vb) return 1*mul; return 0; });
+  const arrow = f=> etudeFinSort.field===f ? (etudeFinSort.dir==='asc'?' ▲':' ▼') : '';
+  let html = `<tr>
+    <th class="sortable" onclick="setEtudeFinSort('etude')">Étude${arrow('etude')}</th>
+    <th class="sortable" onclick="setEtudeFinSort('nb')">Livrables${arrow('nb')}</th>
+    <th class="sortable" onclick="setEtudeFinSort('prixVendu')">Prix vendu${arrow('prixVendu')}</th>
+    <th class="sortable" onclick="setEtudeFinSort('cout')">Coût réel${arrow('cout')}</th>
+    <th class="sortable" onclick="setEtudeFinSort('heures')">Heures${arrow('heures')}</th>
+    <th class="sortable" onclick="setEtudeFinSort('marge')">Marge${arrow('marge')}</th>
+    <th class="sortable" onclick="setEtudeFinSort('tauxMarge')">Taux de marge${arrow('tauxMarge')}</th>
+  </tr>`;
+  list.forEach(x=>{
+    html += `<tr>
+      <td>${escapeHtml(x.etude)}</td>
+      <td>${x.nb}</td>
+      <td>${fmtEuro(x.prixVendu)}</td>
+      <td>${fmtEuro(x.cout)}</td>
+      <td>${x.heures.toFixed(1)} h</td>
+      <td>${margeSpan(x.marge)}</td>
+      <td>${tauxMargeBar(x.tauxMarge)}</td>
+    </tr>`;
+  });
+  if(!list.length) html += `<tr><td colspan="7" class="muted small" style="padding:14px 12px;">Aucune étude.</td></tr>`;
+  t.innerHTML = html;
+}
+function setEtudeFinSort(field){
+  if(etudeFinSort.field===field) etudeFinSort.dir = etudeFinSort.dir==='asc'?'desc':'asc';
+  else { etudeFinSort.field=field; etudeFinSort.dir='desc'; }
+  renderEtudeFinTable();
+}
+
+let consultantFinSort = {field:'margeOccupee', dir:'desc'};
+function renderConsultantFinTable(){
+  initFinPeriod();
+  const startInput = document.getElementById('fin-period-start');
+  const endInput = document.getElementById('fin-period-end');
+  if(startInput && !startInput.value) startInput.value = finPeriod.start;
+  if(endInput && !endInput.value) endInput.value = finPeriod.end;
+  const periodStart = d(finPeriod.start), periodEnd = d(finPeriod.end);
+
+  const t = document.getElementById('tbl-consultant-renta');
+  let list = consultantFinancials(periodStart, periodEnd).map(x=> ({...x, occ: occupancyRate(x.nom, periodStart, periodEnd)}));
+  const {field,dir} = consultantFinSort; const mul = dir==='asc'?1:-1;
+  list.sort((a,b)=>{ const va=a[field], vb=b[field]; if(va<vb) return -1*mul; if(va>vb) return 1*mul; return 0; });
+  const arrow = f=> consultantFinSort.field===f ? (consultantFinSort.dir==='asc'?' ▲':' ▼') : '';
+  let html = `<tr>
+    <th class="sortable" onclick="setConsultantFinSort('nom')">Consultant${arrow('nom')}</th>
+    <th class="sortable" onclick="setConsultantFinSort('tauxH')">Coût horaire chargé${arrow('tauxH')}</th>
+    <th class="sortable" onclick="setConsultantFinSort('heures')">Heures pointées${arrow('heures')}</th>
+    <th class="sortable" onclick="setConsultantFinSort('revenue')">CA généré${arrow('revenue')}</th>
+    <th class="sortable" onclick="setConsultantFinSort('margeOccupee')">Marge occupée${arrow('margeOccupee')}</th>
+    <th class="sortable" onclick="setConsultantFinSort('margeGlobale')">Marge globale (période)${arrow('margeGlobale')}</th>
+    <th class="sortable" onclick="setConsultantFinSort('tauxValorise')">€/h valorisé${arrow('tauxValorise')}</th>
+    <th class="sortable" onclick="setConsultantFinSort('occ')">Occupation (période)${arrow('occ')}</th>
+  </tr>`;
+  list.forEach(x=>{
+    html += `<tr>
+      <td>${escapeHtml(x.nom)}</td>
+      <td>${fmtEuro(x.tauxH)}/h</td>
+      <td>${x.heures.toFixed(1)} h</td>
+      <td>${fmtEuro(x.revenue)}</td>
+      <td>${margeSpan(x.margeOccupee)}</td>
+      <td>${margeSpan(x.margeGlobale)}</td>
+      <td>${fmtEuro(Math.round(x.tauxValorise))}/h</td>
+      <td>${tauxMargeBar(x.occ)}</td>
+    </tr>`;
+  });
+  if(!list.length) html += `<tr><td colspan="8" class="muted small" style="padding:14px 12px;">Aucun consultant.</td></tr>`;
+  t.innerHTML = html;
+}
+function setConsultantFinSort(field){
+  if(consultantFinSort.field===field) consultantFinSort.dir = consultantFinSort.dir==='asc'?'desc':'asc';
+  else { consultantFinSort.field=field; consultantFinSort.dir='desc'; }
+  renderConsultantFinTable();
+}
+
+let typeFinSort = {field:'marge', dir:'desc'};
+function renderTypeFinTable(){
+  const t = document.getElementById('tbl-type-renta'); if(!t) return;
+  let list = typeFinancials();
+  const {field,dir} = typeFinSort; const mul = dir==='asc'?1:-1;
+  list.sort((a,b)=>{ const va=a[field], vb=b[field]; if(va<vb) return -1*mul; if(va>vb) return 1*mul; return 0; });
+  const arrow = f=> typeFinSort.field===f ? (typeFinSort.dir==='asc'?' ▲':' ▼') : '';
+  let html = `<tr>
+    <th class="sortable" onclick="setTypeFinSort('type')">Type d'étude${arrow('type')}</th>
+    <th class="sortable" onclick="setTypeFinSort('nb')">Livrables${arrow('nb')}</th>
+    <th class="sortable" onclick="setTypeFinSort('prixVendu')">Prix vendu${arrow('prixVendu')}</th>
+    <th class="sortable" onclick="setTypeFinSort('cout')">Coût réel${arrow('cout')}</th>
+    <th class="sortable" onclick="setTypeFinSort('marge')">Marge${arrow('marge')}</th>
+    <th class="sortable" onclick="setTypeFinSort('tauxMarge')">Taux de marge${arrow('tauxMarge')}</th>
+  </tr>`;
+  list.forEach(x=>{
+    html += `<tr><td>${escapeHtml(x.type)}</td><td>${x.nb}</td><td>${fmtEuro(x.prixVendu)}</td><td>${fmtEuro(x.cout)}</td><td>${margeSpan(x.marge)}</td><td>${tauxMargeBar(x.tauxMarge)}</td></tr>`;
+  });
+  if(!list.length) html += `<tr><td colspan="6" class="muted small" style="padding:14px 12px;">Aucun type.</td></tr>`;
+  t.innerHTML = html;
+}
+function setTypeFinSort(field){
+  if(typeFinSort.field===field) typeFinSort.dir = typeFinSort.dir==='asc'?'desc':'asc';
+  else { typeFinSort.field=field; typeFinSort.dir='desc'; }
+  renderTypeFinTable();
+}
+
+let livFinSort = {field:'marge', dir:'desc'};
+function renderLivFinTable(){
+  const t = document.getElementById('tbl-livrable-renta'); if(!t) return;
+  let list = livrableFinancials();
+  const {field,dir} = livFinSort; const mul = dir==='asc'?1:-1;
+  list.sort((a,b)=>{ const va=a[field], vb=b[field]; if(va<vb) return -1*mul; if(va>vb) return 1*mul; return 0; });
+  const arrow = f=> livFinSort.field===f ? (livFinSort.dir==='asc'?' ▲':' ▼') : '';
+  let html = `<tr>
+    <th class="sortable" onclick="setLivFinSort('etude')">Étude${arrow('etude')}</th>
+    <th class="sortable" onclick="setLivFinSort('nom')">Livrable${arrow('nom')}</th>
+    <th class="sortable" onclick="setLivFinSort('prixVendu')">Prix vendu${arrow('prixVendu')}</th>
+    <th class="sortable" onclick="setLivFinSort('cout')">Coût réel${arrow('cout')}</th>
+    <th class="sortable" onclick="setLivFinSort('heures')">Heures${arrow('heures')}</th>
+    <th class="sortable" onclick="setLivFinSort('marge')">Marge${arrow('marge')}</th>
+    <th class="sortable" onclick="setLivFinSort('tauxMarge')">Taux de marge${arrow('tauxMarge')}</th>
+  </tr>`;
+  list.forEach(x=>{
+    html += `<tr><td>${escapeHtml(x.etude)}</td><td>${escapeHtml(x.nom)}</td><td>${fmtEuro(x.prixVendu)}</td><td>${fmtEuro(x.cout)}</td><td>${x.heures.toFixed(1)} h</td><td>${margeSpan(x.marge)}</td><td>${tauxMargeBar(x.tauxMarge)}</td></tr>`;
+  });
+  if(!list.length) html += `<tr><td colspan="7" class="muted small" style="padding:14px 12px;">Aucun livrable.</td></tr>`;
+  t.innerHTML = html;
+}
+function setLivFinSort(field){
+  if(livFinSort.field===field) livFinSort.dir = livFinSort.dir==='asc'?'desc':'asc';
+  else { livFinSort.field=field; livFinSort.dir='desc'; }
+  renderLivFinTable();
+}
+
+function renderFinKPIs(){
+  const studies = studyFinancials();
+  const totalVendu = studies.reduce((s,x)=>s+x.prixVendu,0);
+  const totalCout = studies.reduce((s,x)=>s+x.cout,0);
+  const totalMarge = totalVendu-totalCout;
+  const tauxMargeGlobal = totalVendu>0 ? totalMarge/totalVendu : 0;
+  const cards = [
+    {n:fmtEuro(totalVendu), l:"Chiffre d'affaires vendu", cls:''},
+    {n:fmtEuro(totalCout), l:'Coût de revient réel', cls:''},
+    {n:fmtEuro(totalMarge), l:'Marge globale', cls: totalMarge>=0?'done':'late'},
+    {n:Math.round(tauxMargeGlobal*100)+'%', l:'Taux de marge global', cls: tauxMargeGlobal>=0?'done':'late'},
+    {n:studies.length, l:'Études suivies', cls:''},
+  ];
+  document.getElementById('fin-kpis').innerHTML = cards.map(c=>`<div class="kpi-card ${c.cls}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('');
+}
+function renderFinancials(){
+  renderFinKPIs();
+  renderEtudeFinTable();
+  renderTypeFinTable();
+  renderLivFinTable();
+  renderConsultantFinTable();
+}
+
+// ---------------- vue livrable (onglet dédié, lecture intégrale) ----------------
+let vlFilter = {text:'', consultant:'', statut:''};
+let vlSort = {field:'priority', dir:'asc'};
+function passesVlFilter(l, sched){
+  const f = vlFilter;
+  if(f.text){
+    const hay = (l.etude+' '+l.nom+' '+(l.interlocuteur||'')+' '+(l.departement||'')).toLowerCase();
+    if(!hay.includes(f.text.toLowerCase())) return false;
+  }
+  if(f.consultant && l.realisateur!==f.consultant && l.relecteur!==f.consultant) return false;
+  if(f.statut && computeStatus(l,sched).key!==f.statut) return false;
+  return true;
+}
+function setVlSort(field){
+  if(vlSort.field===field) vlSort.dir = vlSort.dir==='asc'?'desc':'asc';
+  else { vlSort.field=field; vlSort.dir='asc'; }
+  renderVueLivrableTable();
+}
+function populateVlFilterOptions(){
+  const sel = document.getElementById('vl-filter-consultant'); if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">Tous les consultants</option>` + TEAM.map(t=>`<option value="${escapeHtml(t.nom)}" ${t.nom===cur?'selected':''}>${escapeHtml(t.nom)}</option>`).join('');
+}
+function renderVueLivrableTable(){
+  populateVlFilterOptions();
+  const t = document.getElementById('tbl-vue-livrable'); if(!t) return;
+  const sched = computeSchedule();
+  let list = LIVRABLES.filter(l=>passesVlFilter(l,sched));
+  const {field,dir} = vlSort; const mul = dir==='asc'?1:-1;
+  list = [...list].sort((a,b)=>{
+    let va,vb;
+    if(field==='priority'){ va=a.priority||a.id; vb=b.priority||b.id; }
+    else if(field==='statut'){ va=computeStatus(a,sched).label; vb=computeStatus(b,sched).label; }
+    else { va=a[field]||''; vb=b[field]||''; }
+    if(va<vb) return -1*mul; if(va>vb) return 1*mul; return 0;
+  });
+  const arrow = f=> vlSort.field===f ? (vlSort.dir==='asc'?' ▲':' ▼') : '';
+  let html = `<tr>
+    <th class="sortable" onclick="setVlSort('priority')">Prio.${arrow('priority')}</th>
+    <th class="sortable" onclick="setVlSort('etude')">Étude${arrow('etude')}</th>
+    <th class="sortable" onclick="setVlSort('departement')">Département${arrow('departement')}</th>
+    <th class="sortable" onclick="setVlSort('interlocuteur')">Interlocuteur${arrow('interlocuteur')}</th>
+    <th class="sortable" onclick="setVlSort('nom')">Livrable${arrow('nom')}</th>
+    <th>Type</th><th>Cpx</th>
+    <th class="sortable" onclick="setVlSort('prix')">Prix initial${arrow('prix')}</th>
+    <th>Surfacturation(s)</th>
+    <th>Prix final</th>
+    <th class="sortable" onclick="setVlSort('realisateur')">Réalisateur${arrow('realisateur')}</th>
+    <th class="sortable" onclick="setVlSort('relecteur')">Relecteur${arrow('relecteur')}</th>
+    <th class="sortable" onclick="setVlSort('dc')">Complétion${arrow('dc')}</th>
+    <th class="sortable" onclick="setVlSort('plan')">Plan Delivery Date${arrow('plan')}</th>
+    <th class="sortable" onclick="setVlSort('delivery')">Livraison${arrow('delivery')}</th>
+    <th class="sortable" onclick="setVlSort('duree')">Durée est.${arrow('duree')}</th>
+    <th>Réal./Relect.</th>
+    <th>Heures consommées</th>
+    <th>Commentaire</th>
+    <th>Bon de commande</th>
+    <th>Erreur Aixial</th>
+    <th class="sortable" onclick="setVlSort('statut')">Statut${arrow('statut')}</th>
+  </tr>`;
+  if(!list.length) html += `<tr><td colspan="21" class="muted small" style="padding:14px 12px;">Aucun livrable ne correspond aux filtres.</td></tr>`;
+  list.forEach(l=>{
+    const st = computeStatus(l, sched);
+    const {pctReal,pctRelect} = splitFor(l.type);
+    const consommees = hoursFor(l.id,"Réalisation") + hoursFor(l.id,"Relecture");
+    const surfs = Array.isArray(l.surfacturations) ? l.surfacturations : [];
+    const surfText = surfs.length ? surfs.map(sf=>surfLabel(sf.type)).join(', ') : '—';
+    html += `<tr>
+      <td>${l.priority||l.id}</td>
+      <td class="wrap-cell">${escapeHtml(l.etude)}</td>
+      <td>${escapeHtml(l.departement||'—')}</td>
+      <td>${escapeHtml(l.interlocuteur||'—')}</td>
+      <td class="wrap-cell">${escapeHtml(l.nom)}</td>
+      <td>${escapeHtml(l.type)}</td>
+      <td>${escapeHtml(l.cpx)}</td>
+      <td>${fmtEuro(l.prix)}</td>
+      <td>${escapeHtml(surfText)}</td>
+      <td class="fin-num-pos" style="font-weight:600;">${fmtEuro(prixFinal(l))}</td>
+      <td>${escapeHtml(l.realisateur)}</td>
+      <td>${escapeHtml(l.relecteur)}</td>
+      <td>${fmtDate(d(l.dc))}</td>
+      <td>${fmtDate(d(l.plan))}</td>
+      <td>${l.delivery?fmtDate(d(l.delivery)):'—'}</td>
+      <td>${Number(l.duree||0).toFixed(1)} h</td>
+      <td>${estHoursReal(l).toFixed(1)}h / ${estHoursRelect(l).toFixed(1)}h (${pctReal}%/${pctRelect}%)</td>
+      <td>${consommees.toFixed(1)} h</td>
+      <td class="wrap-cell">${escapeHtml(l.commentaire||'—')}</td>
+      <td>${escapeHtml(l.bonCommande||'—')}</td>
+      <td>${l.erreurAixial?'⚠ Oui':'—'}</td>
+      <td><span class="badge status-${st.key}">${st.label}</span></td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+
+// ---------------- vue consultant (gestion des données) ----------------
+let cvState = {consultant:null, role:'', sort:{field:'plan', dir:'asc'}};
+function populateCvSelect(){
+  const sel = document.getElementById('cv-select-consultant'); if(!sel) return;
+  if(!cvState.consultant && TEAM.length) cvState.consultant = TEAM[0].nom;
+  const cur = cvState.consultant;
+  sel.innerHTML = TEAM.map(t=>`<option value="${escapeHtml(t.nom)}" ${t.nom===cur?'selected':''}>${escapeHtml(t.nom)}</option>`).join('');
+}
+function setCvSort(field){
+  if(cvState.sort.field===field) cvState.sort.dir = cvState.sort.dir==='asc'?'desc':'asc';
+  else { cvState.sort.field=field; cvState.sort.dir='asc'; }
+  renderConsultantView();
+}
+function renderConsultantView(){
+  populateCvSelect();
+  const t = document.getElementById('tbl-consultant-view'); if(!t) return;
+  const sched = computeSchedule();
+  const selected = cvState.consultant;
+  const roleFilter = cvState.role;
+  let rows = [];
+  LIVRABLES.forEach(l=>{
+    if(l.realisateur===selected && (roleFilter===''||roleFilter==='R')) rows.push({l, role:'Réalisation', roleCode:'R'});
+    if(l.relecteur===selected && (roleFilter===''||roleFilter==='L')) rows.push({l, role:'Relecture', roleCode:'L'});
+  });
+  const {field,dir} = cvState.sort; const mul = dir==='asc'?1:-1;
+  rows.sort((a,b)=>{
+    let va,vb;
+    if(field==='statut'){ va=computeStatus(a.l,sched).label; vb=computeStatus(b.l,sched).label; }
+    else if(field==='role'){ va=a.role; vb=b.role; }
+    else { va=a.l[field]||''; vb=b.l[field]||''; }
+    if(va<vb) return -1*mul; if(va>vb) return 1*mul; return 0;
+  });
+  const arrow = f=> cvState.sort.field===f ? (cvState.sort.dir==='asc'?' ▲':' ▼') : '';
+  let html = `<tr>
+    <th class="sortable" onclick="setCvSort('etude')">Étude${arrow('etude')}</th>
+    <th class="sortable" onclick="setCvSort('nom')">Livrable${arrow('nom')}</th>
+    <th class="sortable" onclick="setCvSort('role')">Rôle${arrow('role')}</th>
+    <th>Type</th><th>Cpx</th>
+    <th class="sortable" onclick="setCvSort('plan')">Plan Delivery Date${arrow('plan')}</th>
+    <th class="sortable" onclick="setCvSort('statut')">Statut${arrow('statut')}</th>
+    <th>Heures pointées</th><th>Prix</th>
+  </tr>`;
+  rows.forEach(({l,role,roleCode})=>{
+    const st = computeStatus(l, sched);
+    const heures = roleCode==='R' ? hoursFor(l.id,"Réalisation") : hoursFor(l.id,"Relecture");
+    html += `<tr>
+      <td>${escapeHtml(l.etude)}</td>
+      <td>${escapeHtml(l.nom)}</td>
+      <td>${role}</td>
+      <td>${escapeHtml(l.type)}</td>
+      <td>${escapeHtml(l.cpx)}</td>
+      <td>${fmtDate(d(l.plan))}</td>
+      <td><span class="badge status-${st.key}">${st.label}</span></td>
+      <td>${heures.toFixed(1)} h</td>
+      <td>${fmtEuro(l.prix)}</td>
+    </tr>`;
+  });
+  if(!rows.length) html += `<tr><td colspan="9" class="muted small" style="padding:14px 12px;">Aucun livrable pour ce consultant avec ces filtres.</td></tr>`;
+  t.innerHTML = html;
+}
+
+// ---------------- facturation ----------------
+function totalFacture(l){ return (l.factures||[]).reduce((s,f)=>s+Number(f.montant||0),0); }
+function resteAFacturer(l){ return Math.max(prixFinal(l) - totalFacture(l), 0); }
+function factStatutKey(l){
+  const tf = totalFacture(l), pf = prixFinal(l);
+  if(tf<=0.01) return 'nonfacture';
+  if(tf < pf-0.01) return 'partiel';
+  return 'complet';
+}
+let factFilter = {statut:'', departement:''};
+function populateFactFilterOptions(){
+  const sel = document.getElementById('fact-filter-departement'); if(!sel) return;
+  const cur = sel.value;
+  const depts = [...new Set(LIVRABLES.map(l=>l.departement).filter(Boolean))];
+  sel.innerHTML = `<option value="">Tous les départements</option>` + depts.map(dep=>`<option value="${escapeHtml(dep)}" ${dep===cur?'selected':''}>${escapeHtml(dep)}</option>`).join('');
+}
+function renderFacturationTable(){
+  populateFactFilterOptions();
+  const t = document.getElementById('tbl-facturation'); if(!t) return;
+  let list = LIVRABLES.filter(l=>l.delivery);
+  if(factFilter.statut) list = list.filter(l=>factStatutKey(l)===factFilter.statut);
+  if(factFilter.departement) list = list.filter(l=>l.departement===factFilter.departement);
+  list = [...list].sort((a,b)=> (b.delivery||'').localeCompare(a.delivery||''));
+  let html = `<tr><th>Étude</th><th>Livrable</th><th>Département</th><th>Livré le</th><th>Prix final</th><th>Facturé</th><th>Reste à facturer</th><th>Statut</th><th>Factures</th></tr>`;
+  if(!list.length) html += `<tr><td colspan="9" class="muted small" style="padding:14px 12px;">Aucun livrable livré ne correspond aux filtres.</td></tr>`;
+  list.forEach(l=>{
+    const pf = prixFinal(l), tf = totalFacture(l), reste = resteAFacturer(l);
+    const key = factStatutKey(l);
+    const label = key==='nonfacture'?'Non facturé':key==='partiel'?'Partiel':'Facturé';
+    const cls = key==='nonfacture'?'status-retard':key==='partiel'?'status-risque':'status-livre';
+    const factLines = (l.factures||[]).map((f,i)=>`<div class="fact-line">${escapeHtml(f.mois)} · ${fmtEuro(f.montant)}<button onclick="removeFacture(${l.id},${i})" title="Supprimer">✕</button></div>`).join('');
+    html += `<tr>
+      <td>${escapeHtml(l.etude)}</td>
+      <td>${escapeHtml(l.nom)}</td>
+      <td>${escapeHtml(l.departement||'—')}</td>
+      <td>${fmtDate(d(l.delivery))}</td>
+      <td>${fmtEuro(pf)}</td>
+      <td>${fmtEuro(tf)}</td>
+      <td>${fmtEuro(reste)}</td>
+      <td><span class="badge ${cls}">${label}</span></td>
+      <td style="min-width:230px;">
+        <div class="fact-list">${factLines}</div>
+        <div class="fact-mini-form">
+          <input type="month" id="fact-mois-${l.id}" value="${iso(todayMidnight()).slice(0,7)}">
+          <input type="number" id="fact-montant-${l.id}" value="${reste.toFixed(0)}" placeholder="Montant">
+          <button class="candidate-btn" onclick="addFacture(${l.id})">+ Facturer</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+function addFacture(id){
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  const moisInput = document.getElementById('fact-mois-'+id);
+  const montantInput = document.getElementById('fact-montant-'+id);
+  const mois = moisInput ? moisInput.value : iso(todayMidnight()).slice(0,7);
+  const montant = Number(montantInput && montantInput.value)||0;
+  if(!mois || montant<=0) return;
+  if(!Array.isArray(l.factures)) l.factures=[];
+  l.factures.push({mois, montant});
+  saveAndRenderAll();
+}
+function removeFacture(id, idx){
+  const l = LIVRABLES.find(x=>x.id===id); if(!l) return;
+  l.factures.splice(idx,1);
+  saveAndRenderAll();
+}
+function renderFactKPIs(){
+  const delivered = LIVRABLES.filter(l=>l.delivery);
+  const totalAFacturer = delivered.reduce((s,l)=>s+prixFinal(l),0);
+  const totalFacturé = delivered.reduce((s,l)=>s+totalFacture(l),0);
+  const reste = totalAFacturer-totalFacturé;
+  const nbNonFacture = delivered.filter(l=>factStatutKey(l)==='nonfacture').length;
+  const cards = [
+    {n:delivered.length, l:'Livrables livrés', cls:''},
+    {n:fmtEuro(totalFacturé), l:'Total facturé', cls:'done'},
+    {n:fmtEuro(reste), l:'Reste à facturer', cls: reste>0?'risk':'done'},
+    {n:nbNonFacture, l:'Non encore facturés', cls: nbNonFacture>0?'late':''},
+  ];
+  const el = document.getElementById('fact-kpis'); if(el) el.innerHTML = cards.map(c=>`<div class="kpi-card ${c.cls}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('');
+}
+function renderFacturation(){ renderFactKPIs(); renderFacturationTable(); }
+
+// ---------------- bons de commande / budget ----------------
+function nextBcId(){ return BONS_COMMANDE.length ? Math.max(...BONS_COMMANDE.map(b=>b.id))+1 : 1; }
+function renderBcTable(){
+  const t = document.getElementById('tbl-bc'); if(!t) return;
+  let html = `<tr><th>Bon de commande</th><th>Département</th><th>Montant global (€)</th><th></th></tr>`;
+  BONS_COMMANDE.forEach(bc=>{
+    html += `<tr>
+      <td><input value="${escapeHtml(bc.nom)}" onchange="updateBc(${bc.id},'nom',this.value)"></td>
+      <td><input value="${escapeHtml(bc.departement)}" onchange="updateBc(${bc.id},'departement',this.value)"></td>
+      <td><input type="number" value="${bc.montant}" onchange="updateBc(${bc.id},'montant',Number(this.value))"></td>
+      <td><button class="icon-btn" onclick="deleteBc(${bc.id})" title="Supprimer">✕</button></td>
+    </tr>`;
+  });
+  if(!BONS_COMMANDE.length) html += `<tr><td colspan="4" class="muted small" style="padding:14px 6px;">Aucun bon de commande. Ajoutez-en un, puis rattachez des livrables via la colonne « Bon de commande » de l'onglet Livrables.</td></tr>`;
+  t.innerHTML = html;
+}
+function updateBc(id, field, value){ const bc=BONS_COMMANDE.find(b=>b.id===id); if(bc) bc[field]=value; saveAndRenderAll(); }
+function deleteBc(id){ BONS_COMMANDE = BONS_COMMANDE.filter(b=>b.id!==id); saveAndRenderAll(); }
+document.addEventListener('DOMContentLoaded', ()=>{});
+function renderBudgetDeptTable(){
+  const t = document.getElementById('tbl-budget-dept'); if(!t) return;
+  let html = `<tr><th>Département</th><th>Bon de commande</th><th>Budget global</th><th>Consommé (prix final)</th><th>Restant</th></tr>`;
+  const rows = [];
+  BONS_COMMANDE.forEach(bc=>{
+    const items = LIVRABLES.filter(l=>l.bonCommande===bc.nom);
+    const consomme = items.reduce((s,l)=>s+prixFinal(l),0);
+    rows.push({dept:bc.departement, bc:bc.nom, budget:bc.montant, consomme});
+  });
+  const deptsSansBc = [...new Set(LIVRABLES.filter(l=>l.departement && !BONS_COMMANDE.some(bc=>bc.nom===l.bonCommande)).map(l=>l.departement))];
+  deptsSansBc.forEach(dep=>{
+    const items = LIVRABLES.filter(l=>l.departement===dep && !BONS_COMMANDE.some(bc=>bc.nom===l.bonCommande));
+    const consomme = items.reduce((s,l)=>s+prixFinal(l),0);
+    rows.push({dept:dep, bc:'(sans bon de commande)', budget:null, consomme});
+  });
+  if(!rows.length) html += `<tr><td colspan="5" class="muted small" style="padding:14px 12px;">Aucune donnée. Renseignez le département des livrables et, si besoin, un bon de commande.</td></tr>`;
+  rows.forEach(r=>{
+    const pct = r.budget ? r.consomme/r.budget : null;
+    const over = r.budget!=null && r.consomme>r.budget;
+    html += `<tr>
+      <td>${escapeHtml(r.dept||'—')}</td>
+      <td>${escapeHtml(r.bc)}</td>
+      <td>${r.budget!=null?fmtEuro(r.budget):'—'}</td>
+      <td>${r.budget!=null ? `<div class="bc-budget-bar-wrap"><div class="bc-budget-bar ${over?'over':''}" style="width:${Math.min(Math.max(pct*100,0),100)}%"></div></div>` : ''}${fmtEuro(r.consomme)}</td>
+      <td class="${over?'fin-num-neg':''}">${r.budget!=null?fmtEuro(r.budget-r.consomme):'—'}</td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+
+// ---------------- historique ----------------
+function mondayOfDate(dt){ const day=dt.getDay(); const diff=(day===0?-6:1-day); return new Date(dt.getTime()+diff*dayMs); }
+function bucketKeyAndLabel(dt, gran){
+  const y = dt.getFullYear(), m = dt.getMonth();
+  if(gran==='mois') return {key: y+'-'+String(m+1).padStart(2,'0'), label: monthNames[m]+' '+String(y).slice(2)};
+  if(gran==='trimestre'){ const q=Math.floor(m/3)+1; return {key:y+'-T'+q, label:'T'+q+' '+String(y).slice(2)}; }
+  if(gran==='semestre'){ const s=Math.floor(m/6)+1; return {key:y+'-S'+s, label:'S'+s+' '+String(y).slice(2)}; }
+  return {key:String(y), label:String(y)};
+}
+function periodStartOf(dt, gran){
+  const y=dt.getFullYear(), m=dt.getMonth();
+  if(gran==='mois') return new Date(y,m,1);
+  if(gran==='trimestre') return new Date(y, Math.floor(m/3)*3, 1);
+  if(gran==='semestre') return new Date(y, Math.floor(m/6)*6, 1);
+  return new Date(y,0,1);
+}
+function nextPeriodOf(dt, gran){
+  const y=dt.getFullYear(), m=dt.getMonth();
+  if(gran==='mois') return new Date(y, m+1, 1);
+  if(gran==='trimestre') return new Date(y, m+3, 1);
+  if(gran==='semestre') return new Date(y, m+6, 1);
+  return new Date(y+1, 0, 1);
+}
+// Génère TOUTES les périodes de l'axe entre rangeStart et rangeEnd, y compris celles à 0 —
+// une période sans activité doit rester visible en abscisse, pas disparaître du graphe.
+function generateAllBuckets(gran, rangeStart, rangeEnd){
+  const buckets = [];
+  let cur = periodStartOf(rangeStart, gran);
+  let guard = 0;
+  while(cur <= rangeEnd && guard<400){
+    guard++;
+    const {key,label} = bucketKeyAndLabel(cur, gran);
+    buckets.push({key, label, montant:0, order:cur.getTime()});
+    cur = nextPeriodOf(cur, gran);
+  }
+  return buckets;
+}
+function filterByScope(list, scope){
+  return list.filter(l=>{
+    if(scope.consultant && l.realisateur!==scope.consultant && l.relecteur!==scope.consultant) return false;
+    if(scope.departement && l.departement!==scope.departement) return false;
+    return true;
+  });
+}
+function inRangeByBasis(l, basis, rangeStart, rangeEnd){
+  if(basis==='delivery'){ if(!l.delivery) return false; const p=d(l.delivery); return p>=rangeStart && p<=rangeEnd; }
+  if(basis==='facturation'){ return (l.factures||[]).some(f=>{ const p=d(f.mois+'-01'); return p>=rangeStart && p<=rangeEnd; }); }
+  const p=d(l.plan); return p>=rangeStart && p<=rangeEnd;
+}
+function histBuckets(gran, rangeStart, rangeEnd, basis, scope){
+  const axis = generateAllBuckets(gran, rangeStart, rangeEnd);
+  const byKey = {}; axis.forEach(b=> byKey[b.key]=b);
+  function addTo(dt, montant){
+    if(!dt || dt<rangeStart || dt>rangeEnd) return;
+    const {key} = bucketKeyAndLabel(dt, gran);
+    if(byKey[key]) byKey[key].montant += montant;
+  }
+  const list = filterByScope(LIVRABLES, scope);
+  if(basis==='delivery'){
+    list.forEach(l=>{ if(l.delivery) addTo(d(l.delivery), prixFinal(l)); });
+  } else if(basis==='facturation'){
+    list.forEach(l=> (l.factures||[]).forEach(f=> addTo(d(f.mois+'-01'), Number(f.montant)||0)));
+  } else {
+    list.forEach(l=> addTo(d(l.plan), prixFinal(l)));
+  }
+  return axis;
+}
+// Graphique en barres SVG : dégradé, coins arrondis en haut uniquement, infobulle native au survol.
+function roundedTopBarPath(x, y, w, h, r){
+  r = Math.min(r, w/2, h);
+  if(h<=0) return '';
+  return `M${x},${y+h} L${x},${y+r} Q${x},${y} ${x+r},${y} L${x+w-r},${y} Q${x+w},${y} ${x+w},${y+r} L${x+w},${y+h} Z`;
+}
+function renderBarChartSVG(containerId, data, gradId){
+  const el = document.getElementById(containerId); if(!el) return;
+  if(!data.length){ el.innerHTML = `<p class="muted small">Aucune donnée sur la fenêtre sélectionnée.</p>`; return; }
+  const W=Math.max(900, data.length*76),H=300,padL=68,padB=52,padT=28,padR=24;
+  const maxV = Math.max(...data.map(x=>x.montant), 1);
+  const gap = (W-padL-padR)/data.length;
+  const barW = Math.min(gap*0.6, 56);
+  const grad = gradId || 'histGrad';
+  let bars='', labels='', grid='';
+  for(let i=0;i<=4;i++){
+    const y = padT + (H-padT-padB)*(1-i/4);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#E4E6DF" stroke-width="1" stroke-dasharray="3,3"></line>`;
+    grid += `<text x="${padL-10}" y="${y+3}" font-size="9.5" text-anchor="end" fill="#8A94A0" font-family="IBM Plex Mono, monospace">${Math.round(maxV*i/4/1000)}k€</text>`;
+  }
+  grid += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="#C7CBC2" stroke-width="1.2"></line>`;
+  data.forEach((x,i)=>{
+    const h = (x.montant/maxV)*(H-padT-padB);
+    const bx = padL + i*gap + (gap-barW)/2;
+    const y = H-padB-h;
+    const fill = x.montant>0 ? `url(#${grad})` : '#EDEFE8';
+    if(x.montant>0){
+      bars += `<path d="${roundedTopBarPath(bx,y,barW,Math.max(h,2),6)}" fill="${fill}" class="hist-bar"><title>${escapeHtml(x.label)} : ${fmtEuro(x.montant)}</title></path>`;
+      bars += `<text x="${bx+barW/2}" y="${y-8}" font-size="10.5" text-anchor="middle" fill="#16233A" font-family="IBM Plex Mono, monospace" font-weight="600">${Math.round(x.montant/1000)}k€</text>`;
+    } else {
+      bars += `<rect x="${bx}" y="${H-padB-3}" width="${barW}" height="3" rx="1.5" fill="#DCDFD6"><title>${escapeHtml(x.label)} : 0 €</title></rect>`;
+    }
+    labels += `<text x="${bx+barW/2}" y="${H-padB+20}" font-size="10.5" text-anchor="middle" fill="#5C7080" font-family="IBM Plex Mono, monospace">${escapeHtml(x.label)}</text>`;
+  });
+  el.innerHTML = `<div class="table-scroll"><svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none;height:auto;background:#fff;border:1px solid var(--line);border-radius:10px;">
+    <defs><linearGradient id="${grad}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4C8BC2"></stop>
+      <stop offset="100%" stop-color="#28587E"></stop>
+    </linearGradient></defs>
+    ${grid}${bars}${labels}
+  </svg></div>`;
+}
+function renderHistKPIs(scope){
+  const inScope = filterByScope(LIVRABLES, scope);
+  const delivered = inScope.filter(l=>l.delivery);
+  const sched = computeSchedule();
+  const late = inScope.filter(l=>{ const st=computeStatus(l,sched); return st.key==='retard' || st.label==='Livré en retard'; }).length;
+  const tauxRetard = inScope.length ? Math.round(late/inScope.length*100) : 0;
+  const margeTotale = inScope.reduce((s,l)=>{
+    const hR=hoursFor(l.id,"Réalisation"), hL=hoursFor(l.id,"Relecture");
+    return s + prixFinal(l) - (hR*rateOf(l.realisateur)+hL*rateOf(l.relecteur));
+  },0);
+  const nbErreurs = inScope.filter(l=>l.erreurAixial).length;
+  const pctErreurs = inScope.length ? Math.round(nbErreurs/inScope.length*100) : 0;
+  let occMoy;
+  if(scope.consultant){
+    occMoy = Math.round(occupancyRate(scope.consultant, todayMidnight(), new Date(todayMidnight().getTime()+30*dayMs))*100);
+  } else {
+    const occs = TEAM.map(p=>occupancyRate(p.nom, todayMidnight(), new Date(todayMidnight().getTime()+30*dayMs)));
+    occMoy = occs.length ? Math.round(occs.reduce((a,b)=>a+b,0)/occs.length*100) : 0;
+  }
+  const cards = [
+    {n:inScope.length, l:'Livrables au total', cls:''},
+    {n:occMoy+'%', l: scope.consultant ? `Occupation (30j) — ${scope.consultant}` : "Occupation moyenne équipe (30j)", cls:''},
+    {n:fmtEuro(margeTotale), l:'Marge totale', cls: margeTotale>=0?'done':'late'},
+    {n:tauxRetard+'%', l:'% de retard', cls: tauxRetard<=20?'done':(tauxRetard<=40?'risk':'late')},
+    {n:pctErreurs+'%', l:'% erreurs cause Aixial', cls: nbErreurs>0?'late':'done'},
+  ];
+  const el = document.getElementById('hist-kpis'); if(el) el.innerHTML = cards.map(c=>`<div class="kpi-card ${c.cls}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('');
+}
+function renderHistListing(scope){
+  const t = document.getElementById('tbl-hist-listing'); if(!t) return;
+  const list = filterByScope(LIVRABLES, scope);
+  const sched = computeSchedule();
+  let html = `<tr><th>Étude</th><th>Livrable</th><th>Type</th><th>Département</th><th>Réalisateur</th><th>Relecteur</th><th>Plan Delivery Date</th><th>Livraison</th><th>Statut</th><th>Prix final</th><th>Marge</th><th>Erreur Aixial</th></tr>`;
+  if(!list.length) html += `<tr><td colspan="12" class="muted small" style="padding:14px 12px;">Aucune étude ne correspond au périmètre sélectionné.</td></tr>`;
+  list.forEach(l=>{
+    const st = computeStatus(l, sched);
+    const hR=hoursFor(l.id,"Réalisation"), hL=hoursFor(l.id,"Relecture");
+    const marge = prixFinal(l) - (hR*rateOf(l.realisateur)+hL*rateOf(l.relecteur));
+    html += `<tr>
+      <td>${escapeHtml(l.etude)}</td><td>${escapeHtml(l.nom)}</td><td>${escapeHtml(l.type)}</td><td>${escapeHtml(l.departement||'—')}</td>
+      <td>${escapeHtml(l.realisateur)}</td><td>${escapeHtml(l.relecteur)}</td>
+      <td>${fmtDate(d(l.plan))}</td><td>${l.delivery?fmtDate(d(l.delivery)):'—'}</td>
+      <td><span class="badge status-${st.key}">${st.label}</span></td>
+      <td>${fmtEuro(prixFinal(l))}</td><td>${margeSpan(marge)}</td>
+      <td>${l.erreurAixial?'⚠ Oui':'—'}</td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+// Analyse par type d'étude, sur l'ensemble des données (indépendant de la fenêtre du graphique).
+function typeStatsFull(scope){
+  const list = filterByScope(LIVRABLES, scope);
+  const sched = computeSchedule();
+  const types = [...new Set(list.map(l=>l.type))];
+  return types.map(type=>{
+    const items = list.filter(l=>l.type===type);
+    const n = items.length;
+    const margeMoy = n ? items.reduce((s,l)=>{
+      const hR=hoursFor(l.id,"Réalisation"), hL=hoursFor(l.id,"Relecture");
+      return s + prixFinal(l) - (hR*rateOf(l.realisateur)+hL*rateOf(l.relecteur));
+    },0)/n : 0;
+    const tempsMoy = n ? items.reduce((s,l)=>s+Number(l.duree||0),0)/n : 0;
+    const nbErreurs = items.filter(l=>l.erreurAixial).length;
+    const pctErreur = n ? nbErreurs/n*100 : 0;
+    const nbRetard = items.filter(l=>{ const st=computeStatus(l,sched); return st.key==='retard' || st.label==='Livré en retard'; }).length;
+    const pctRetard = n ? nbRetard/n*100 : 0;
+    return {type, n, margeMoy, tempsMoy, pctErreur, pctRetard};
+  });
+}
+let typeStatsSort = {field:'n', dir:'desc'};
+function renderTypeStatsTable(scope){
+  const t = document.getElementById('tbl-type-stats'); if(!t) return;
+  let list = typeStatsFull(scope);
+  const {field,dir} = typeStatsSort; const mul = dir==='asc'?1:-1;
+  list.sort((a,b)=>{ const va=a[field], vb=b[field]; if(va<vb) return -1*mul; if(va>vb) return 1*mul; return 0; });
+  const arrow = f=> typeStatsSort.field===f ? (typeStatsSort.dir==='asc'?' ▲':' ▼') : '';
+  let html = `<tr>
+    <th class="sortable" onclick="setTypeStatsSort('type')">Type d'étude${arrow('type')}</th>
+    <th class="sortable" onclick="setTypeStatsSort('n')">Nb livrables${arrow('n')}</th>
+    <th class="sortable" onclick="setTypeStatsSort('margeMoy')">Marge moyenne${arrow('margeMoy')}</th>
+    <th class="sortable" onclick="setTypeStatsSort('tempsMoy')">Temps moyen (h)${arrow('tempsMoy')}</th>
+    <th class="sortable" onclick="setTypeStatsSort('pctErreur')">% erreur moyen${arrow('pctErreur')}</th>
+    <th class="sortable" onclick="setTypeStatsSort('pctRetard')">% de retard${arrow('pctRetard')}</th>
+  </tr>`;
+  if(!list.length) html += `<tr><td colspan="6" class="muted small" style="padding:14px 12px;">Aucune donnée.</td></tr>`;
+  list.forEach(x=>{
+    html += `<tr>
+      <td>${escapeHtml(x.type)}</td>
+      <td>${x.n}</td>
+      <td>${margeSpan(x.margeMoy)}</td>
+      <td>${x.tempsMoy.toFixed(1)} h</td>
+      <td>${tauxMargeBar(x.pctErreur/100)}</td>
+      <td>${tauxMargeBar(x.pctRetard/100)}</td>
+    </tr>`;
+  });
+  t.innerHTML = html;
+}
+function setTypeStatsSort(field){
+  if(typeStatsSort.field===field) typeStatsSort.dir = typeStatsSort.dir==='asc'?'desc':'asc';
+  else { typeStatsSort.field=field; typeStatsSort.dir='desc'; }
+  renderTypeStatsTable(histScope);
+}
+function renderTypeStatsChart(scope){
+  const list = typeStatsFull(scope).sort((a,b)=>b.n-a.n);
+  const data = list.map(x=>({label:x.type.replace(/^Etude /,''), montant:x.n}));
+  const el = document.getElementById('hist-type-chart'); if(!el) return;
+  if(!data.length){ el.innerHTML=''; return; }
+  const W=Math.max(700, data.length*90),H=200,padL=50,padB=60,padT=20,padR=20;
+  const maxV = Math.max(...data.map(x=>x.montant),1);
+  const gap=(W-padL-padR)/data.length, barW=Math.min(gap*0.55,50);
+  let bars='',labels='';
+  data.forEach((x,i)=>{
+    const h=(x.montant/maxV)*(H-padT-padB);
+    const bx=padL+i*gap+(gap-barW)/2, y=H-padB-h;
+    bars += `<path d="${roundedTopBarPath(bx,y,barW,Math.max(h,2),5)}" fill="url(#typeGrad)"><title>${escapeHtml(x.label)} : ${x.montant} livrable(s)</title></path>`;
+    bars += `<text x="${bx+barW/2}" y="${y-6}" font-size="10" text-anchor="middle" fill="#16233A" font-family="IBM Plex Mono, monospace" font-weight="600">${x.montant}</text>`;
+    labels += `<text x="${bx+barW/2}" y="${H-padB+16}" font-size="9.5" text-anchor="middle" fill="#5C7080" font-family="IBM Plex Mono, monospace" transform="rotate(18 ${bx+barW/2} ${H-padB+16})">${escapeHtml(x.label)}</text>`;
+  });
+  el.innerHTML = `<div class="table-scroll"><svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none;height:auto;background:#fff;border:1px solid var(--line);border-radius:10px;">
+    <defs><linearGradient id="typeGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3E9B85"></stop><stop offset="100%" stop-color="#255E4F"></stop></linearGradient></defs>
+    ${bars}${labels}
+  </svg></div>`;
+}
+let histState = {gran:'mois', base:'pdd', start:null, end:null};
+let histScope = {consultant:'', departement:''};
+function initHistPeriod(){
+  if(histState.start && histState.end) return;
+  const dates = LIVRABLES.map(l=>d(l.plan).getTime());
+  const min = dates.length?new Date(Math.min(...dates)):todayMidnight();
+  const max = dates.length?new Date(Math.max(...dates)):todayMidnight();
+  histState.start = iso(min);
+  histState.end = iso(new Date(max.getTime()+30*dayMs));
+}
+function populateHistFilterOptions(){
+  const selC = document.getElementById('hist-filter-consultant');
+  const selD = document.getElementById('hist-filter-departement');
+  if(selC){ const cur=selC.value; selC.innerHTML = `<option value="">Tous les consultants</option>` + TEAM.map(t=>`<option value="${escapeHtml(t.nom)}" ${t.nom===cur?'selected':''}>${escapeHtml(t.nom)}</option>`).join(''); }
+  if(selD){ const cur=selD.value; const depts=[...new Set(LIVRABLES.map(l=>l.departement).filter(Boolean))]; selD.innerHTML = `<option value="">Tous les départements</option>` + depts.map(dep=>`<option value="${escapeHtml(dep)}" ${dep===cur?'selected':''}>${escapeHtml(dep)}</option>`).join(''); }
+}
+function renderHistorique(){
+  initHistPeriod();
+  populateHistFilterOptions();
+  const s1=document.getElementById('hist-period-start'), s2=document.getElementById('hist-period-end');
+  if(s1 && !s1.value) s1.value = histState.start;
+  if(s2 && !s2.value) s2.value = histState.end;
+  const rangeStart = d(histState.start), rangeEnd = d(histState.end);
+  const titleEl = document.getElementById('hist-chart-title');
+  const baseLabel = histState.base==='pdd' ? 'Plan Delivery Date' : histState.base==='delivery' ? 'Delivery Date' : 'date de facturation';
+  const scopeLabel = histScope.consultant ? ` — ${histScope.consultant}` : histScope.departement ? ` — ${histScope.departement}` : '';
+  if(titleEl) titleEl.textContent = (histState.base==='facturation' ? "Montant facturé par période" : "Chiffre d'affaires par période") + ` (${baseLabel})${scopeLabel}`;
+  const buckets = histBuckets(histState.gran, rangeStart, rangeEnd, histState.base, histScope);
+  renderBarChartSVG('hist-chart', buckets);
+  renderHistKPIs(histScope);
+  renderTypeStatsTable(histScope);
+  renderTypeStatsChart(histScope);
+  renderHistListing(histScope);
+  renderBcTable();
+  renderBudgetDeptTable();
+}
+
+
+// ---------------- analyse croisée (tableau croisé dynamique) ----------------
+const PIVOT_PALETTE = ['#3E76A8','#2F8F7A','#E0973C','#C1473C','#8B5FBF','#527485','#B08968','#6B8E5F','#A8556B','#4A6FA5'];
+function representativeDate(l, basis){
+  if(basis==='delivery') return l.delivery ? d(l.delivery) : null;
+  if(basis==='facturation'){
+    if(!l.factures || !l.factures.length) return null;
+    return new Date(Math.min(...l.factures.map(f=>d(f.mois+'-01').getTime())));
+  }
+  return d(l.plan);
+}
+function pivotDimensionValues(dim){
+  if(dim==='type') return [...new Set(LIVRABLES.map(l=>l.type))];
+  if(dim==='departement') return [...new Set(LIVRABLES.map(l=>l.departement).filter(Boolean))];
+  if(dim==='complexite') return [...new Set(LIVRABLES.map(l=>l.cpx))];
+  if(dim==='consultant') return TEAM.map(t=>t.nom);
+  return [];
+}
+function pivotDimLabel(dim){
+  return {type:"Type d'étude", consultant:'Consultant', departement:'Département', complexite:'Complexité'}[dim] || dim;
+}
+function generatePivotPeriods(gran, rangeStart, rangeEnd){
+  const periods = [];
+  let cur = periodStartOf(rangeStart, gran);
+  let guard = 0;
+  while(cur <= rangeEnd && guard<400){
+    guard++;
+    const {key,label} = bucketKeyAndLabel(cur, gran);
+    const end = nextPeriodOf(cur, gran);
+    periods.push({key, label, start:cur, end});
+    cur = end;
+  }
+  return periods;
+}
+function pivotCellItems(dim, value, basis, bucketStart, bucketEnd){
+  return LIVRABLES.filter(l=>{
+    const rd = representativeDate(l, basis);
+    if(!rd || rd<bucketStart || rd>=bucketEnd) return false;
+    if(dim==='type') return l.type===value;
+    if(dim==='departement') return l.departement===value;
+    if(dim==='complexite') return l.cpx===value;
+    if(dim==='consultant') return l.realisateur===value || l.relecteur===value;
+    return false;
+  });
+}
+function consultantCaMarge(value, items, basis){
+  let ca=0, cout=0;
+  const person = TEAM.find(t=>t.nom===value);
+  const tauxH = coutHoraireCharge(person);
+  items.forEach(l=>{
+    const {pctReal, pctRelect} = splitFor(l.type);
+    const hR=hoursFor(l.id,"Réalisation"), hL=hoursFor(l.id,"Relecture");
+    const estR=estHoursReal(l), estL=estHoursRelect(l);
+    const montant = basis==='facturation' ? totalFacture(l) : prixFinal(l);
+    const ratio = prixFinal(l)>0 ? montant/prixFinal(l) : 0; // proratise si on ne facture qu'une partie
+    if(l.realisateur===value && hR>0){
+      const av = estR>0 ? Math.min(hR/estR,1) : 1;
+      ca += av*(pctReal/100)*montant;
+      cout += hR*tauxH*(basis==='facturation'?ratio:1);
+    }
+    if(l.relecteur===value && hL>0){
+      const av = estL>0 ? Math.min(hL/estL,1) : 1;
+      ca += av*(pctRelect/100)*montant;
+      cout += hL*tauxH*(basis==='facturation'?ratio:1);
+    }
+  });
+  return {ca, marge:ca-cout};
+}
+function pivotMetricValue(metric, dim, value, items, basis, bucketStart, bucketEnd){
+  if(metric==='ca'){
+    if(dim==='consultant') return consultantCaMarge(value, items, basis).ca;
+    return items.reduce((s,l)=> s + (basis==='facturation'?totalFacture(l):prixFinal(l)), 0);
+  }
+  if(metric==='marge'){
+    if(dim==='consultant') return consultantCaMarge(value, items, basis).marge;
+    return items.reduce((s,l)=>{
+      const hR=hoursFor(l.id,"Réalisation"), hL=hoursFor(l.id,"Relecture");
+      return s + prixFinal(l) - (hR*rateOf(l.realisateur)+hL*rateOf(l.relecteur));
+    },0);
+  }
+  if(metric==='erreur'){
+    const n=items.length; if(!n) return 0;
+    return items.filter(l=>l.erreurAixial).length/n*100;
+  }
+  if(metric==='occupation'){
+    if(dim==='consultant') return occupancyRate(value, bucketStart, bucketEnd)*100;
+    const people = new Set();
+    items.forEach(l=>{ if(l.realisateur) people.add(l.realisateur); if(l.relecteur) people.add(l.relecteur); });
+    const arr=[...people];
+    if(!arr.length) return 0;
+    return arr.reduce((s,p)=> s+occupancyRate(p,bucketStart,bucketEnd),0)/arr.length*100;
+  }
+  return 0;
+}
+function pivotFmtValue(metric, v){
+  if(metric==='ca'||metric==='marge') return fmtEuro(v);
+  return Math.round(v)+'%';
+}
+function pivotMetricLabel(metric){
+  return {ca:"Chiffre d'affaires", marge:'Marge', occupation:"Taux d'occupation", erreur:"% d'erreur"}[metric] || metric;
+}
+
+let pivotState = {dim:'type', metric:'ca', gran:'mois', base:'pdd', start:null, end:null};
+function initPivotPeriod(){
+  if(pivotState.start && pivotState.end) return;
+  const dates = LIVRABLES.map(l=>d(l.plan).getTime());
+  const min = dates.length?new Date(Math.min(...dates)):todayMidnight();
+  const max = dates.length?new Date(Math.max(...dates)):todayMidnight();
+  pivotState.start = iso(periodStartOf(min,'mois'));
+  pivotState.end = iso(new Date(max.getTime()+30*dayMs));
+}
+function computePivotData(){
+  const rangeStart = d(pivotState.start), rangeEnd = d(pivotState.end);
+  const periods = generatePivotPeriods(pivotState.gran, rangeStart, rangeEnd);
+  const values = pivotDimensionValues(pivotState.dim);
+  const grid = values.map(value=>{
+    const cells = periods.map(p=>{
+      const items = pivotCellItems(pivotState.dim, value, pivotState.base, p.start, p.end);
+      return pivotMetricValue(pivotState.metric, pivotState.dim, value, items, pivotState.base, p.start, p.end);
+    });
+    const isAvgMetric = pivotState.metric==='occupation' || pivotState.metric==='erreur';
+    const total = isAvgMetric
+      ? (cells.length ? cells.reduce((a,b)=>a+b,0)/cells.length : 0)
+      : cells.reduce((a,b)=>a+b,0);
+    return {value, cells, total};
+  });
+  grid.sort((a,b)=> b.total-a.total);
+  return {periods, grid};
+}
+function renderPivotTable(){
+  const t = document.getElementById('tbl-pivot'); if(!t) return;
+  const {periods, grid} = computePivotData();
+  const isAvgMetric = pivotState.metric==='occupation' || pivotState.metric==='erreur';
+  let html = `<tr><th>${escapeHtml(pivotDimLabel(pivotState.dim))}</th>${periods.map(p=>`<th>${escapeHtml(p.label)}</th>`).join('')}<th>${isAvgMetric?'Moyenne':'Total'}</th></tr>`;
+  if(!grid.length) html += `<tr><td colspan="${periods.length+2}" class="muted small" style="padding:14px 12px;">Aucune donnée.</td></tr>`;
+  grid.forEach(row=>{
+    html += `<tr><td>${escapeHtml(row.value)}</td>${row.cells.map(v=>`<td>${pivotFmtValue(pivotState.metric,v)}</td>`).join('')}<td style="font-weight:600;">${pivotFmtValue(pivotState.metric,row.total)}</td></tr>`;
+  });
+  // ligne total colonnes (somme/moyenne tous groupes confondus par période)
+  if(grid.length){
+    const colTotals = periods.map((p,i)=>{
+      const vals = grid.map(r=>r.cells[i]);
+      return isAvgMetric ? (vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0) : vals.reduce((a,b)=>a+b,0);
+    });
+    const grandTotal = isAvgMetric ? (colTotals.length?colTotals.reduce((a,b)=>a+b,0)/colTotals.length:0) : colTotals.reduce((a,b)=>a+b,0);
+    html += `<tr style="background:var(--panel);"><td style="font-weight:700;">${isAvgMetric?'Moyenne globale':'Total'}</td>${colTotals.map(v=>`<td style="font-weight:700;">${pivotFmtValue(pivotState.metric,v)}</td>`).join('')}<td style="font-weight:700;">${pivotFmtValue(pivotState.metric,grandTotal)}</td></tr>`;
+  }
+  t.innerHTML = html;
+}
+function renderMultiLineChart(containerId, legendId, periods, grid, metric){
+  const el = document.getElementById(containerId); if(!el) return;
+  const legendEl = document.getElementById(legendId);
+  if(!periods.length || !grid.length){ el.innerHTML = `<p class="muted small">Aucune donnée sur la période sélectionnée.</p>`; if(legendEl) legendEl.innerHTML=''; return; }
+  const W=Math.max(760, periods.length*90), H=300, padL=64, padB=40, padT=24, padR=24;
+  const allVals = grid.flatMap(r=>r.cells);
+  const maxV = Math.max(...allVals, 1);
+  const minV = Math.min(0, ...allVals);
+  const xFor = i => padL + (periods.length<=1 ? (W-padL-padR)/2 : i*(W-padL-padR)/(periods.length-1));
+  const yFor = v => padT + (H-padT-padB)*(1-(v-minV)/((maxV-minV)||1));
+  let grid_svg='', labels='';
+  for(let i=0;i<=4;i++){
+    const yy = padT + (H-padT-padB)*(1-i/4);
+    const val = minV + (maxV-minV)*i/4;
+    grid_svg += `<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="#E4E6DF" stroke-width="1" stroke-dasharray="3,3"></line>`;
+    grid_svg += `<text x="${padL-10}" y="${yy+3}" font-size="9.5" text-anchor="end" fill="#8A94A0" font-family="IBM Plex Mono, monospace">${metric==='ca'||metric==='marge'?Math.round(val/1000)+'k€':Math.round(val)+'%'}</text>`;
+  }
+  periods.forEach((p,i)=>{
+    labels += `<text x="${xFor(i)}" y="${H-padB+18}" font-size="10" text-anchor="middle" fill="#5C7080" font-family="IBM Plex Mono, monospace">${escapeHtml(p.label)}</text>`;
+  });
+  let lines='', legend='';
+  grid.slice(0,10).forEach((row,ri)=>{
+    const color = PIVOT_PALETTE[ri % PIVOT_PALETTE.length];
+    const pts = row.cells.map((v,i)=>`${xFor(i)},${yFor(v)}`).join(' ');
+    lines += `<polyline class="pivot-line" points="${pts}" fill="none" stroke="${color}" stroke-width="2.4"></polyline>`;
+    row.cells.forEach((v,i)=>{
+      lines += `<circle class="pivot-dot" cx="${xFor(i)}" cy="${yFor(v)}" r="3.6" fill="${color}"><title>${escapeHtml(String(row.value))} — ${escapeHtml(periods[i].label)} : ${pivotFmtValue(metric,v)}</title></circle>`;
+    });
+    legend += `<div class="pivot-legend-item"><span class="pivot-legend-swatch" style="background:${color}"></span>${escapeHtml(String(row.value))} (${pivotFmtValue(metric,row.total)})</div>`;
+  });
+  el.innerHTML = `<div class="table-scroll"><svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none;height:auto;background:#fff;border:1px solid var(--line);border-radius:10px;">${grid_svg}${lines}${labels}</svg></div>`;
+  if(legendEl) legendEl.innerHTML = legend;
+}
+function renderPivot(){
+  initPivotPeriod();
+  const s1=document.getElementById('pivot-period-start'), s2=document.getElementById('pivot-period-end');
+  if(s1 && !s1.value) s1.value = pivotState.start;
+  if(s2 && !s2.value) s2.value = pivotState.end;
+  const baseLabel = pivotState.base==='pdd'?'Plan Delivery Date':pivotState.base==='delivery'?'Delivery Date':'date de facturation';
+  const titleEl = document.getElementById('pivot-chart-title');
+  if(titleEl) titleEl.textContent = `${pivotMetricLabel(pivotState.metric)} par ${pivotDimLabel(pivotState.dim).toLowerCase()} — évolution par ${pivotState.gran} (${baseLabel})`;
+  const descEl = document.getElementById('pivot-desc');
+  if(descEl) descEl.textContent = "Période, granularité, dimension et métrique sont entièrement ajustables ci-dessus ; le tableau et le graphique se recalculent ensemble.";
+  const {periods, grid} = computePivotData();
+  renderPivotTable();
+  renderMultiLineChart('pivot-chart', 'pivot-legend', periods, grid, pivotState.metric);
+}
+
+// ---------------- wiring ----------------
+function renderAll(){
+  renderKPIs();
+  renderConflicts();
+  renderGantt();
+  renderLivrablesTable();
+  renderVueLivrableTable();
+  renderConsultantView();
+  renderEquipeTable();
+  renderReferentielTable();
+  renderHeuresTable();
+  renderFinancials();
+  renderFacturation();
+  renderHistorique();
+  renderPivot();
+}
+async function saveAndRenderAll(){
+  renderAll();
+  await saveData();
+}
+
+document.getElementById('main-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.main-tab-btn'); if(!btn) return;
+  document.querySelectorAll('.main-tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.main-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-'+btn.dataset.maintab).classList.add('active');
+  if(btn.dataset.maintab==='financier') renderFinancials();
+  else if(btn.dataset.maintab==='facturation') renderFacturation();
+  else if(btn.dataset.maintab==='historique') renderHistorique();
+  else if(btn.dataset.maintab==='livrables') renderVueLivrableTable();
+  else if(btn.dataset.maintab==='pivot') renderPivot();
+  else renderGantt();
+});
+document.getElementById('pivot-dim').addEventListener('change', e=>{ pivotState.dim=e.target.value; renderPivot(); });
+document.getElementById('pivot-metric').addEventListener('change', e=>{ pivotState.metric=e.target.value; renderPivot(); });
+document.getElementById('pivot-gran-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab-btn'); if(!btn) return;
+  document.querySelectorAll('#pivot-gran-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); pivotState.gran = btn.dataset.gran; renderPivot();
+});
+document.getElementById('pivot-base-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab-btn'); if(!btn) return;
+  document.querySelectorAll('#pivot-base-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); pivotState.base = btn.dataset.base; renderPivot();
+});
+document.getElementById('pivot-period-start').addEventListener('change', e=>{ pivotState.start=e.target.value; renderPivot(); });
+document.getElementById('pivot-period-end').addEventListener('change', e=>{ pivotState.end=e.target.value; renderPivot(); });
+document.getElementById('vl-search').addEventListener('input', e=>{ vlFilter.text=e.target.value; renderVueLivrableTable(); });
+document.getElementById('vl-filter-consultant').addEventListener('change', e=>{ vlFilter.consultant=e.target.value; renderVueLivrableTable(); });
+document.getElementById('vl-filter-statut').addEventListener('change', e=>{ vlFilter.statut=e.target.value; renderVueLivrableTable(); });
+document.getElementById('fact-filter-statut').addEventListener('change', e=>{ factFilter.statut=e.target.value; renderFacturationTable(); });
+document.getElementById('fact-filter-departement').addEventListener('change', e=>{ factFilter.departement=e.target.value; renderFacturationTable(); });
+document.getElementById('hist-gran-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab-btn'); if(!btn) return;
+  document.querySelectorAll('#hist-gran-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); histState.gran = btn.dataset.gran; renderHistorique();
+});
+document.getElementById('hist-base-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab-btn'); if(!btn) return;
+  document.querySelectorAll('#hist-base-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); histState.base = btn.dataset.base; renderHistorique();
+});
+document.getElementById('hist-period-start').addEventListener('change', e=>{ histState.start=e.target.value; renderHistorique(); });
+document.getElementById('hist-period-end').addEventListener('change', e=>{ histState.end=e.target.value; renderHistorique(); });
+document.getElementById('hist-filter-consultant').addEventListener('change', e=>{ histScope.consultant=e.target.value; renderHistorique(); });
+document.getElementById('hist-filter-departement').addEventListener('change', e=>{ histScope.departement=e.target.value; renderHistorique(); });
+document.getElementById('hist-print-btn').addEventListener('click', ()=>{
+  document.querySelectorAll('.main-tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.main-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-historique').classList.add('active');
+  window.print();
+});
+document.getElementById('add-bc').addEventListener('click', ()=>{
+  BONS_COMMANDE.push({id:nextBcId(), nom:'Nouveau BC', departement:'', montant:10000});
+  saveAndRenderAll();
+});
+document.getElementById('cv-select-consultant').addEventListener('change', e=>{ cvState.consultant=e.target.value; renderConsultantView(); });
+document.getElementById('cv-filter-role').addEventListener('change', e=>{ cvState.role=e.target.value; renderConsultantView(); });
+document.getElementById('fin-period-start').addEventListener('change', e=>{ finPeriod.start=e.target.value; renderConsultantFinTable(); });
+document.getElementById('fin-period-end').addEventListener('change', e=>{ finPeriod.end=e.target.value; renderConsultantFinTable(); });
+document.getElementById('view-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab-btn'); if(!btn) return;
+  document.querySelectorAll('#view-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); currentView = btn.dataset.view; renderGantt();
+});
+document.getElementById('zoom-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab-btn'); if(!btn) return;
+  document.querySelectorAll('#zoom-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); currentZoom = btn.dataset.zoom;
+  if(currentZoom!=='mois') calAnchor = todayMidnight();
+  renderGantt();
+});
+document.getElementById('cal-prev').addEventListener('click', ()=>{
+  calAnchor = new Date(calAnchor.getTime() - (currentZoom==='jour'?1:7)*dayMs);
+  renderGantt();
+});
+document.getElementById('cal-next').addEventListener('click', ()=>{
+  calAnchor = new Date(calAnchor.getTime() + (currentZoom==='jour'?1:7)*dayMs);
+  renderGantt();
+});
+document.getElementById('cal-today').addEventListener('click', ()=>{
+  calAnchor = todayMidnight(); renderGantt();
+});
+document.getElementById('liv-search').addEventListener('input', e=>{ livFilter.text=e.target.value; renderLivrablesTable(); });
+document.getElementById('liv-filter-consultant').addEventListener('change', e=>{ livFilter.consultant=e.target.value; renderLivrablesTable(); });
+document.getElementById('liv-filter-statut').addEventListener('change', e=>{ livFilter.statut=e.target.value; renderLivrablesTable(); });
+document.getElementById('heures-filter-consultant').addEventListener('change', e=>{ heuresFilter.consultant=e.target.value; renderHeuresTable(); });
+document.getElementById('heures-filter-livrable').addEventListener('change', e=>{ heuresFilter.livrableId=e.target.value; renderHeuresTable(); });
+document.getElementById('manage-toggle').addEventListener('click', function(){
+  this.classList.toggle('open');
+  document.getElementById('manage-panel').classList.toggle('open');
+});
+document.querySelectorAll('.mtab-btn').forEach(btn=>{
+  if(!btn.dataset.m) return;
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.mtab-btn').forEach(b=>{ if(b.dataset.m) b.classList.remove('active'); });
+    document.querySelectorAll('.msection').forEach(s=>s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('m-'+btn.dataset.m).classList.add('active');
+  });
+});
+document.getElementById('reset-btn').addEventListener('click', async ()=>{
+  if(!confirm("Réinitialiser toutes les données avec le jeu d'exemple ? Cette action est irréversible pour tous les utilisateurs de cet outil.")) return;
+  seedData();
+  await saveAndRenderAll();
+});
+
+// ---------------- import Excel ----------------
+function normKey(s){ return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function pick(row, ...names){
+  const keys = Object.keys(row);
+  for(const name of names){
+    const target = normKey(name);
+    const found = keys.find(k=> normKey(k)===target);
+    if(found!==undefined && row[found]!=='' && row[found]!=null) return row[found];
+  }
+  return '';
+}
+function excelDateToIso(v){
+  if(v==null || v==='') return '';
+  if(v instanceof Date) return iso(v);
+  if(typeof v==='number'){ const dt = XLSX.SSF.parse_date_code(v); if(dt) return `${dt.y}-${String(dt.m).padStart(2,'0')}-${String(dt.d).padStart(2,'0')}`; }
+  const s = String(v).trim();
+  const m1 = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
+  const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m2) return `${m2[3]}-${m2[2].padStart(2,'0')}-${m2[1].padStart(2,'0')}`;
+  return '';
+}
+function readFirstSheetRows(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      try{
+        const wb = XLSX.read(e.target.result, {type:'binary', cellDates:true});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+        resolve(rows);
+      }catch(err){ reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsBinaryString(file);
+  });
+}
+document.getElementById('import-referentiel').addEventListener('change', async e=>{
+  const file = e.target.files[0]; if(!file) return;
+  try{
+    const rows = await readFirstSheetRows(file);
+    let added = 0;
+    rows.forEach(row=>{
+      const type = pick(row,'Type','Type d\'étude',"Type d'etude");
+      const cpx = pick(row,'Complexité','Complexite','Cpx');
+      const prix = Number(pick(row,'Prix','Prix fixe','Prix (€)'))||0;
+      const duree = Number(pick(row,'Durée','Duree','Durée (h)'))||12;
+      if(!type) return;
+      REFERENTIEL.push({type:String(type), cpx:String(cpx||'Basse'), prix, duree});
+      added++;
+    });
+    if(added){ syncSplits(); await saveAndRenderAll(); alert(`${added} ligne(s) de référentiel importée(s).`); }
+    else alert("Aucune ligne valide trouvée (colonne 'Type' manquante ou vide).");
+  }catch(err){ alert("Erreur lors de la lecture du fichier Excel : "+err.message); }
+  e.target.value = '';
+});
+document.getElementById('import-livrables').addEventListener('change', async e=>{
+  const file = e.target.files[0]; if(!file) return;
+  try{
+    const rows = await readFirstSheetRows(file);
+    let added = 0, skipped = 0;
+    rows.forEach(row=>{
+      const etude = pick(row,'Étude','Etude');
+      const nom = pick(row,'Livrable','Nom du livrable');
+      const type = pick(row,'Type',"Type d'étude","Type d'etude");
+      if(!etude || !nom || !type){ skipped++; return; }
+      const cpx = pick(row,'Complexité','Complexite','Cpx') || 'Basse';
+      const ref = REFERENTIEL.find(r=>r.type===String(type) && r.cpx===String(cpx));
+      const prixRaw = pick(row,'Prix','Prix initial');
+      const dureeRaw = pick(row,'Durée','Duree');
+      const realisateur = pick(row,'Réalisateur','Realisateur') || (TEAM[0]?.nom||'');
+      const relecteur = pick(row,'Relecteur') || (TEAM[1]?.nom||TEAM[0]?.nom||'');
+      const dc = excelDateToIso(pick(row,'Date complétion','Date completion','Complétion','Completion')) || iso(todayMidnight());
+      const plan = excelDateToIso(pick(row,'Plan Delivery Date','Plan delivery date','Cible')) || iso(new Date(todayMidnight().getTime()+21*dayMs));
+      const id = nextId(LIVRABLES);
+      LIVRABLES.push({
+        id, etude:String(etude), nom:String(nom), type:String(type), cpx:String(cpx),
+        prix: prixRaw!=='' ? Number(prixRaw) : (ref?ref.prix:0),
+        realisateur:String(realisateur), relecteur:String(relecteur),
+        dc, plan, delivery:null,
+        duree: dureeRaw!=='' ? Number(dureeRaw) : (ref?ref.duree:12),
+        priority: nextId(LIVRABLES),
+        departement: String(pick(row,'Département','Departement')||''),
+        interlocuteur: String(pick(row,'Interlocuteur')||''),
+        commentaire: String(pick(row,'Commentaire')||''),
+        surfacturations: [], relectureAnticipee:null, erreurAixial:false, factures:[], bonCommande:''
+      });
+      added++;
+    });
+    renumberPriorities();
+    if(added){ await saveAndRenderAll(); alert(`${added} livrable(s) importé(s).${skipped?` ${skipped} ligne(s) ignorée(s) (Étude/Livrable/Type manquant).`:''}`); }
+    else alert("Aucune ligne valide trouvée (colonnes Étude / Livrable / Type requises).");
+  }catch(err){ alert("Erreur lors de la lecture du fichier Excel : "+err.message); }
+  e.target.value = '';
+});
+
+loadData();
+</script>
+</body>
+</html>
