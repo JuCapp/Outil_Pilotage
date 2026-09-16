@@ -3034,5 +3034,40 @@ document.getElementById('import-livrables').addEventListener('change', async e=>
 
 loadData();
 </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = "https://lqbjgfcsnzgaycwktdxy.supabase.co/rest/v1/"
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxYmpnZmNzbnpnYXljd2t0ZHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0Nzc1MzAsImV4cCI6MjEwNTA1MzUzMH0.a9femvlgv3JW4pPNAUQvOkzPrAz-qkl1idzq7KKg1O4"
+  
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  // Exemple : enregistrer un formulaire
+  async function saveData() {
+    const { data, error } = await supabaseClient
+      .from('contacts')
+      .insert([
+        { 
+          name: document.getElementById('name').value,
+          email: document.getElementById('email').value,
+          message: document.getElementById('message').value
+        }
+      ])
+    
+    if (error) {
+      console.error(error)
+      alert("Erreur : " + error.message)
+    } else {
+      alert("Données enregistrées !")
+    }
+  }
+
+  // Exemple : lire les données
+  async function loadData() {
+    const { data, error } = await supabaseClient
+      .from('contacts')
+      .select('*')
+    console.log(data)
+  }
+</script>
 </body>
 </html>
