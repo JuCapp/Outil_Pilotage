@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pilotage Plateau — Gantt dynamique</title>
@@ -19,7 +20,7 @@
   body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;padding:28px 32px 70px;}
   h1{font-family:'Archivo',sans-serif;font-weight:700;font-size:22px;margin:0 0 2px;letter-spacing:-.01em;}
   .subtitle{font-size:13px;color:var(--steel);margin:0 0 6px;}
-  .storage-note{font-size:11.5px;color:var(--steel);margin:0 0 18px;display:flex;align-items:center;gap:8px;}
+  .-note{font-size:11.5px;color:var(--steel);margin:0 0 18px;display:flex;align-items:center;gap:8px;}
   .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block;}
   .dot.loading{background:var(--amber);}
 
@@ -163,7 +164,7 @@
   .pivot-dot{cursor:pointer;}
   @media print{
     body{padding:8px;background:#fff;}
-    .main-tabs,.manage-toggle,.manage-panel,.storage-note,.cal-nav,.toolbar,#reset-btn,.reset-btn,#hist-print-btn,button{display:none !important;}
+    .main-tabs,.manage-toggle,.manage-panel,.-note,.cal-nav,.toolbar,#reset-btn,.reset-btn,#hist-print-btn,button{display:none !important;}
     .main-panel{display:block !important;}
     .fin-section{page-break-inside:avoid;margin-bottom:18px;}
     table.fin-table{border:1px solid #ccc;}
@@ -214,7 +215,7 @@
 
 <h1>Pilotage plateau — Gantt dynamique</h1>
 <p class="subtitle">Ordonnancement automatique des livrables, sous contrainte de disponibilité de chaque consultant (réalisation → relecture)</p>
-<p class="storage-note"><span class="dot loading" id="storage-dot"></span><span id="storage-text">Chargement des données partagées…</span></p>
+<p class="-note"><span class="dot loading" id="-dot"></span><span id="-text">Chargement des données partagées…</span></p>
 
 <div class="main-tabs" id="main-tabs">
   <button class="main-tab-btn active" data-maintab="technique">Pilotage technique</button>
@@ -575,8 +576,8 @@ function seedData(){
   ];
 }
 
-// ---------------- storage ----------------
-const STORAGE_KEY = "plateau_data_v1";
+// ----------------  ----------------
+const _KEY = "plateau_data_v1";
 const JOURS_OUVRES_AN = 218;
 const MULTIPLICATEUR_CHARGES = 1.61;
 function coutHoraireCharge(person){
@@ -627,40 +628,40 @@ function migrateData(){
 }
 async function loadData(){
   try{
-    const res = await window.storage.get(STORAGE_KEY, true);
+    const res = await window..get(_KEY, true);
     if(res && res.value){
       const parsed = JSON.parse(res.value);
       TEAM = parsed.team || []; REFERENTIEL = parsed.referentiel || [];
       SPLITS = parsed.splits || []; LIVRABLES = parsed.livrables || []; HEURES = parsed.heures || [];
       BONS_COMMANDE = parsed.bonsCommande || [];
       migrateData();
-      setStorageStatus(true, "Données partagées chargées");
+      setStatus(true, "Données partagées chargées");
     } else {
       seedData();
       migrateData();
       await saveData();
-      setStorageStatus(true, "Données d'exemple initialisées");
+      setStatus(true, "Données d'exemple initialisées");
     }
   }catch(e){
     seedData();
     migrateData();
-    setStorageStatus(false, "Stockage indisponible — données en mémoire locale (non partagées)");
+    setStatus(false, "Stockage indisponible — données en mémoire locale (non partagées)");
   }
   renderAll();
 }
 async function saveData(){
   try{
     const payload = JSON.stringify({team:TEAM, referentiel:REFERENTIEL, splits:SPLITS, livrables:LIVRABLES, heures:HEURES, bonsCommande:BONS_COMMANDE});
-    const res = await window.storage.set(STORAGE_KEY, payload, true);
-    if(!res) setStorageStatus(false, "Échec de la sauvegarde partagée");
-    else setStorageStatus(true, "Données partagées — synchronisées");
+    const res = await window..set(_KEY, payload, true);
+    if(!res) setStatus(false, "Échec de la sauvegarde partagée");
+    else setStatus(true, "Données partagées — synchronisées");
   }catch(e){
-    setStorageStatus(false, "Échec de la sauvegarde partagée");
+    setStatus(false, "Échec de la sauvegarde partagée");
   }
 }
-function setStorageStatus(ok, text){
-  document.getElementById('storage-dot').classList.toggle('loading', !ok);
-  document.getElementById('storage-text').textContent = text;
+function setStatus(ok, text){
+  document.getElementById('-dot').classList.toggle('loading', !ok);
+  document.getElementById('-text').textContent = text;
 }
 
 // ---------------- scheduling engine ----------------
